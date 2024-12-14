@@ -4,6 +4,7 @@ use std::path::Path;
 use std::process::Command;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 use tempfile::TempDir;
+use serde_json::Value;
 
 mod download_ggml_model;
 
@@ -61,37 +62,33 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn get_audio_duration(audio_path: &Path) -> f64 {
+fn get_audio_duration(audio_path: &Path) -> Result<f64, Box<dyn std::error::Error>> {
     let duration_output = Command::new("ffmpeg")
         .args([
             "-i",
             &audio_path.to_string_lossy(),
+            "-of", "json",
         ])
         .output()
         .expect("Failed to run FFmpeg");
+
     if !duration_output.status.success() {
-        panic!("Failed to get audio duration");
+        return Err(format!("FFmpeg failed with status: {}", duration_output.status).into());
     }
 
-    // Extract duration from the output
-    let duration_str = String::from_utf8(duration_output.stderr).unwrap();
-    for line in duration_str.lines() {
-        if line.starts_with("Duration") {
-            let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() >= 2 {
-                let duration_part = parts[0].trim().replace("Duration: ", "");
-                let parts: Vec<&str> = duration_part.split(':').collect();
-                if parts.len() == 3 {
-                    let hours: u64 = parts[0].parse().unwrap_or(0);
-                    let minutes: u64 = parts[1].parse().unwrap_or(0);
-                    let seconds: f64 = parts[2].parse().unwrap_or(0.0);
-                    return (hours * 3600) as f64 + (minutes * 60) as f64 + seconds;
-                }
-            }
+    let output_str = String::from_utf8(duration_output.stdout)?;
+    
+    // Parse the JSON output
+    let json: Value = serde_json::from_str(&output_str)?;
+
+    if let Some(durations) = json.get("format").and_then(|f| f.get("duration")) {
+        match durations.as_f64() {
+            Some(duration) => return Ok(duration),
+            None => return Err("Duration not found in JSON output".into()),
         }
     }
 
-    panic!("Failed to parse audio duration");
+    Err("Failed to extract duration from FFmpeg output".into())
 }
 
 fn main() {
@@ -128,7 +125,7 @@ fn main() {
     }
 
     // Get total duration of the audio
-    let total_seconds = get_audio_duration(audio_path);
+    let total_seconds = get_audio_duration(audio_path).expect("Failed to get audio duration");
 
     // Calculate number of chunks
     let chunk_duration = 120.0; // two minutes in seconds
