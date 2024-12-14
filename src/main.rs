@@ -61,61 +61,14 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn get_audio_duration(audio_path: &Path) -> Result<f64, Box<dyn std::error::Error>> {
-    let duration_output = Command::new("ffprobe")
-        .args([
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            audio_path.to_str().unwrap(),
-        ])
-        .output()
-        .expect("Failed to run FFmpeg");
-
-    println!("{}", String::from_utf8_lossy(&duration_output.stdout));
-
-    if !duration_output.status.success() {
-        return Err(format!("FFmpeg failed with status: {}", duration_output.status).into());
-    }
-
-    let output_str = String::from_utf8(duration_output.stdout)?;
-
-    let duration = output_str
-        .trim()
-        .parse::<f64>()
-        .map_err(|e| format!("Failed to parse duration: {}", e))?;
-
-    Ok(duration)
-}
-
 fn main() {
     let arg1 = std::env::args()
         .nth(1)
-        .expect("first argument should be path to audio file");
+        .expect("first argument should be path to WAV file");
     let audio_path = Path::new(&arg1);
     if !audio_path.exists() {
         panic!("audio file doesn't exist");
     }
-
-    // Check if FFmpeg is installed
-    match Command::new("ffmpeg").arg("-version").output() {
-        Ok(output) => {
-            if output.status.success() {
-                println!("FFmpeg is already installed.");
-            } else {
-                println!("FFmpeg is not installed. Downloading now...");
-                download_ffmpeg().expect("Failed to install FFmpeg");
-            }
-        }
-        Err(_) => {
-            println!("FFmpeg is not installed. Downloading now...");
-            download_ffmpeg().expect("Failed to install FFmpeg");
-        }
-    }
-
     let arg2 = std::env::args()
         .nth(2)
         .expect("second argument should be path to Whisper model");
@@ -124,152 +77,41 @@ fn main() {
         panic!("whisper file doesn't exist")
     }
 
-    // Get total duration of the audio
-    let total_seconds = get_audio_duration(audio_path).expect("Failed to get audio duration");
+    let original_samples = parse_wav_file(audio_path);
+    let mut samples = vec![0.0f32; original_samples.len()];
+    whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
+        .expect("failed to convert samples");
 
-    // Calculate number of chunks
-    let chunk_duration = 120.0; // two minutes in seconds
-    let num_chunks = (total_seconds / chunk_duration).ceil() as usize;
+    let ctx = WhisperContext::new_with_params(
+        &whisper_path.to_string_lossy(),
+        WhisperContextParameters::default(),
+    )
+    .expect("failed to open model");
+    let mut state = ctx.create_state().expect("failed to create key");
+    let mut params = FullParams::new(SamplingStrategy::default());
+    params.set_initial_prompt("experience");
+    params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
 
-    let mut combined_transcript = String::new();
-    let mut total_time = std::time::Duration::from_millis(0);
+    let st = std::time::Instant::now();
+    state
+        .full(params, &samples)
+        .expect("failed to convert samples");
+    let et = std::time::Instant::now();
 
-    for i in 0..num_chunks {
-        let start_time = (i as f64) * chunk_duration;
-        let end_time = if (i as f64 + 1.0) * chunk_duration > total_seconds {
-            total_seconds
-        } else {
-            (i as f64 + 1.0) * chunk_duration
-        };
-
-        // Create a temporary directory for each chunk
-        let temp_dir = TempDir::new().expect("Failed to create temporary directory");
-
-        // Define the output file path for this chunk
-        let chunk_path = temp_dir.path().join(format!("chunk_{}.wav", i));
-
-        // Use FFmpeg to extract the chunk
-        Command::new("ffmpeg")
-            .args([
-                "-ss",
-                &format!("{:.2}", start_time),
-                "-t",
-                &format!("{:.2}", end_time - start_time),
-                "-i",
-                &audio_path.to_string_lossy(),
-                "-ac",
-                "1",
-                "-ar",
-                "16000",
-                "-acodec",
-                "pcm_s16le",
-                chunk_path.to_str().unwrap(),
-            ])
-            .spawn()
-            .expect("Failed to run FFmpeg")
-            .wait()
-            .expect("FFmpeg extraction failed");
-
-        // Convert the chunk to WAV format
-        let converted_chunk_path = temp_dir
-            .path()
-            .join(format!("temp_converted_chunk_{}.wav", i));
-        Command::new("ffmpeg")
-            .args([
-                "-i",
-                &chunk_path.to_string_lossy(),
-                "-ac",
-                "1",
-                "-ar",
-                "16000",
-                "-acodec",
-                "pcm_s16le",
-                converted_chunk_path.to_str().unwrap(),
-            ])
-            .spawn()
-            .expect("Failed to run FFmpeg")
-            .wait()
-            .expect("FFmpeg conversion failed");
-
-        let original_samples = parse_wav_file(&converted_chunk_path);
-        fs::remove_file(&converted_chunk_path).unwrap();
-
-        let mut samples = vec![0.0f32; original_samples.len()];
-        whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
-            .expect("failed to convert samples");
-
-        let ctx = WhisperContext::new_with_params(
-            &whisper_path.to_string_lossy(),
-            WhisperContextParameters::default(),
-        )
-        .expect("failed to open model");
-        let mut state = ctx.create_state().expect("failed to create key");
-        let mut params = FullParams::new(SamplingStrategy::default());
-        params.set_initial_prompt("experience");
-        params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
-
-        // Record the start time for this chunk
-        let st = std::time::Instant::now();
-
-        state
-            .full(params, &samples)
-            .expect("failed to convert samples");
-
-        // Record the end time after transcription is complete
-        let et = std::time::Instant::now();
-
-        // Calculate and print duration for this chunk
-        let chunk_time = et - st;
-        println!("Chunk {} took {:.2}ms", i, chunk_time.as_millis());
-
-        // Collect all segment texts into a single string for this chunk
-        let mut transcript = String::new();
-        let num_segments = state
-            .full_n_segments()
-            .expect("failed to get number of segments");
-
-        for j in 0..num_segments {
-            match state.full_get_segment_text(j) {
-                Ok(segment_text) => {
-                    let segment_t0 = state.full_get_segment_t0(j).unwrap();
-                    let segment_t1 = state.full_get_segment_t1(j).unwrap();
-
-                    // Calculate absolute timestamps based on total_seconds
-                    let start_abs = (start_time + segment_t0 as f64) * 1000.0;
-                    let end_abs = (start_time + segment_t1 as f64) * 1000.0;
-
-                    transcript.push_str(&format!(
-                        "[{} - {}]: {}\n",
-                        start_abs.round() as i64,
-                        end_abs.round() as i64,
-                        segment_text
-                    ));
-                }
-                Err(e) => {
-                    eprintln!("Error getting segment text at index {}: {:?}", j, e);
-                    continue;
-                }
-            }
-        }
-
-        // Print the transcript immediately after processing the chunk
-        println!("Chunk {} transcript:\n{}", i, transcript);
-
-        // Add the chunk's transcript to the combined transcript
-        combined_transcript.push_str(&transcript);
-
-        // Clean up temporary files for this chunk
+    let num_segments = state
+        .full_n_segments()
+        .expect("failed to get number of segments");
+    for i in 0..num_segments {
+        let segment = state
+            .full_get_segment_text(i)
+            .expect("failed to get segment");
+        let start_timestamp = state
+            .full_get_segment_t0(i)
+            .expect("failed to get start timestamp");
+        let end_timestamp = state
+            .full_get_segment_t1(i)
+            .expect("failed to get end timestamp");
+        println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
     }
-
-    // Write the final transcript to 'output.txt'
-    if !combined_transcript.is_empty() {
-        let output_path = Path::new("output.txt");
-        fs::write(output_path, &combined_transcript).expect("Failed to write to output.txt");
-        println!("Transcription written to {}", output_path.display());
-    } else {
-        println!("No transcription available.");
-    }
-
-    // Calculate and print total duration
-    println!("Total transcription took {:.2}ms", total_time.as_millis());
+    println!("took {}ms", (et - st).as_millis());
 }
