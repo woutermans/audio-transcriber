@@ -116,13 +116,13 @@ fn main() {
         .unwrap_or(0.0);
 
     let chunk_duration = 120; // two minutes in seconds
-    let num_chunks = (duration_seconds / chunk_duration).ceil() as usize;
+    let num_chunks = (duration_seconds / chunk_duration as f64).ceil() as usize;
 
     let mut final_transcript = String::new();
 
     for i in 0..num_chunks {
-        let start_time = i as f64 * chunk_duration;
-        let end_time = ((i + 1) as f64 * chunk_duration).min(duration_seconds);
+        let start_time = i as f64 * chunk_duration as f64;
+        let end_time = ((i + 1) as f64 * chunk_duration as f64).min(duration_seconds);
 
         // Extract the chunk using ffmpeg
         println!("Extracting chunk {} of {}", i + 1, num_chunks);
@@ -176,8 +176,8 @@ fn main() {
         // Collect all segment texts into a single string
         for j in 0..state.full_n_segments().unwrap() {
             let segment = state.full_get_segment_text(j).expect("failed to get segment");
-            let start_timestamp = state.full_get_segment_t0(j).expect("failed to get start timestamp") + start_time as i64;
-            let end_timestamp = state.full_get_segment_t1(j).expect("failed to get end timestamp") + start_time as i64;
+            let start_timestamp = state.full_get_segment_t0(j).expect("failed to get start timestamp") + (start_time * 1000.0) as i64;
+            let end_timestamp = state.full_get_segment_t1(j).expect("failed to get end timestamp") + (end_time * 1000.0) as i64;
             final_transcript.push_str(&format!("[{} - {}]: {}\n", start_timestamp, end_timestamp, segment));
         }
 
