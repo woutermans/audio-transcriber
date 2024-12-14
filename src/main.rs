@@ -11,7 +11,11 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 mod download_ggml_model;
 
 // If windows: use ./ffmpeg else use ffmpeg
-const FFMPEG_PATH: &str = if cfg!(windows) { "./ffmpeg.exe" } else { "ffmpeg" };
+const FFMPEG_PATH: &str = if cfg!(windows) {
+    "./ffmpeg.exe"
+} else {
+    "ffmpeg"
+};
 
 fn parse_wav_file(path: &Path) -> io::Result<Vec<i16>> {
     let reader = WavReader::open(path).map_err(|e| {
@@ -86,18 +90,11 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
 
         // Move the ffmpeg folder to the current directory
         let src = ffmpeg_folder.path().join("bin").join("ffmpeg.exe");
-        let dst =Path::new("ffmpeg.exe");
+        let dst = Path::new("ffmpeg.exe");
 
-        println!(
-            "{} -> {}",
-            src.to_str().unwrap(),
-            dst.to_str().unwrap()
-        );
+        println!("{} -> {}", src.to_str().unwrap(), dst.to_str().unwrap());
 
-        fs::rename(
-             src,
-             dst,
-        )?;
+        fs::rename(src, dst)?;
 
         // Remove the temporary zip file
         fs::remove_file(temp_file.path())?;
@@ -131,6 +128,40 @@ fn create_temporary_directory() -> Result<TempDir, Box<dyn Error>> {
     TempDir::new().map_err(|e| e.into())
 }
 
+struct Subtitle {
+    seq: u32,
+    start_time_cs: u64, // centiseconds
+    end_time_cs: u64,   // centiseconds
+    text: String,
+}
+
+fn cs_to_srt_time(cs: u64) -> String {
+    let seconds = cs / 100;
+    let milliseconds = (cs % 100) * 10; // Convert centiseconds to milliseconds
+    let hours = (seconds / 3600) % 24;
+    let minutes = (seconds % 3600) / 60;
+    let seconds = seconds % 60;
+    format!("{:02}:{:02}:{:02},{:03}", hours, minutes, seconds, milliseconds)
+}
+
+fn subtitle_to_srt(sub: &Subtitle) -> String {
+    let start_str = cs_to_srt_time(sub.start_time_cs);
+    let end_str = cs_to_srt_time(sub.end_time_cs);
+    format!("{}\n{} --> {}\n{}\n", sub.seq, start_str, end_str, sub.text)
+}
+
+fn write_raw_transcript(subtitles: &[Subtitle], input_path: &Path) -> Result<(), Box<dyn Error>> {
+    let raw_file_path = format!(
+        "{}_raw.txt",
+        input_path.file_stem().unwrap().to_string_lossy()
+    );
+    let mut out_file = fs::File::create(&raw_file_path)?;
+    for sub in subtitles {
+        out_file.write_all(sub.text.as_bytes())?;
+    }
+    Ok(())
+}
+
 fn handle_transcription(
     whisper_path: &Path,
     samples: Vec<f32>,
@@ -152,18 +183,6 @@ fn handle_transcription(
     let sample_batches = samples.chunks(chunk_size).collect::<Vec<_>>();
     let chunk_count = sample_batches.len();
 
-    let out_file_path = format!(
-        "{}_timestamps.txt",
-        input_path.file_stem().unwrap().to_string_lossy()
-    );
-    let out_raw_path = format!(
-        "{}_raw.txt",
-        input_path.file_stem().unwrap().to_string_lossy()
-    );
-
-    let mut out_file = fs::File::create(&out_file_path)?;
-    let mut out_file_raw = fs::File::create(&out_raw_path)?;
-
     let pb = indicatif::ProgressBar::new(chunk_count as u64);
     pb.set_style(
         indicatif::ProgressStyle::default_bar()
@@ -175,35 +194,71 @@ fn handle_transcription(
     );
     pb.enable_steady_tick(Duration::from_millis(100));
 
-    let mut last_timestamp = 0;
+    let mut subtitles = Vec::new();
+    let mut seq_number = 1;
+    let mut total_cs = 0;
+
     for samples in sample_batches {
         state
             .full(params.clone(), &samples)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         let num_segments = state.full_n_segments()?;
-        let mut end_timestamp = 0;
         for i in 0..num_segments {
             let segment = state.full_get_segment_text(i)?;
-            let start_timestamp = state.full_get_segment_t0(i)?;
-            end_timestamp = state.full_get_segment_t1(i)?;
+            let start_timestamp_cs = state.full_get_segment_t0(i)? + total_cs;
+            let end_timestamp_cs = state.full_get_segment_t1(i)? + total_cs;
 
-            out_file.write_all(
-                format!(
-                    "[{} - {}]: {}\n",
-                    start_timestamp + last_timestamp,
-                    end_timestamp + last_timestamp,
-                    segment
-                )
-                .as_bytes(),
-            )?;
-            out_file_raw.write_all(format!("{} ", segment).as_bytes())?;
+            subtitles.push(Subtitle {
+                seq: seq_number,
+                start_time_cs: start_timestamp_cs as u64,
+                end_time_cs: end_timestamp_cs as u64,
+                text: segment,
+            });
+
+            seq_number += 1;
         }
-        last_timestamp = end_timestamp;
+
+        total_cs += (chunk_size as f32 / 16000.0 * 100.0) as i64; // Convert chunk size to centiseconds
         pb.inc(1);
     }
 
     pb.finish_with_message("Done");
+
+    // Write subtitles to SRT file
+    let srt_file_path = format!(
+        "{}_timestamps.srt",
+        input_path.file_stem().unwrap().to_string_lossy()
+    );
+    let mut out_file_srt = fs::File::create(&srt_file_path)?;
+    for sub in &subtitles {
+        out_file_srt.write_all(subtitle_to_srt(sub).as_bytes())?;
+    }
+
+    // Write subtitles to _timestamps.txt file
+    let timestamps_file_path = format!(
+        "{}_timestamps.txt",
+        input_path.file_stem().unwrap().to_string_lossy()
+    );
+    let mut out_file_timestamps = fs::File::create(&timestamps_file_path)?;
+    for sub in &subtitles {
+        out_file_timestamps.write_all(
+            format!(
+                "[{} - {}]: {}\n",
+                sub.start_time_cs, sub.end_time_cs, sub.text
+            )
+            .as_bytes(),
+        )?;
+    }
+
+    // Write raw transcript to raw.txt file
+    match write_raw_transcript(&subtitles, input_path) {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("Failed to write raw transcript: {}", e);
+            std::process::exit(1);
+        }
+    }
 
     Ok(())
 }
@@ -302,9 +357,13 @@ fn main() {
         )
     );
     println!(
-        "Timestamped output written to {}.",
+        "Timestamped output written to {} and {}.",
         &format!(
             "{}_timestamps.txt",
+            audio_path.file_stem().unwrap().to_string_lossy()
+        ),
+        &format!(
+            "{}_timestamps.srt",
             audio_path.file_stem().unwrap().to_string_lossy()
         )
     );
