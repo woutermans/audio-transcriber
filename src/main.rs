@@ -143,16 +143,18 @@ fn main() {
 
     let st = std::time::Instant::now();
 
-    let mut out_file = std::fs::File::create(format!(
+    let out_file_path = format!(
         "{}_timestamps.txt",
-        audio_path.file_name().unwrap().to_string_lossy()
-    ))
-    .unwrap();
-    let mut out_file_raw = std::fs::File::create(format!(
+        audio_path.file_stem().unwrap().to_string_lossy()
+    );
+    let out_raw_path = format!(
         "{}_raw.txt",
-        audio_path.file_name().unwrap().to_string_lossy()
-    ))
-    .unwrap();
+        audio_path.file_stem().unwrap().to_string_lossy()
+    );
+
+    let mut out_file = std::fs::File::create(&out_file_path).unwrap();
+    let mut out_file_raw = std::fs::File::create(&out_raw_path).unwrap();
+
     let mut last_timestamp = 0;
     let chunk_count = sample_batches.len();
     let pb = indicatif::ProgressBar::new(chunk_count as u64);
@@ -209,7 +211,8 @@ fn main() {
     let et = std::time::Instant::now();
     println!("took {}ms", (et - st).as_millis());
     println!("processed {} chunks", chunk_count);
-    println!("Output written to output.txt");
+    println!("Raw output written to {}.", out_raw_path);
+    println!("Timestamped output written to {}.", out_file_path);
 
     // Cleanup: Remove the temporary directory and its contents
     temp_dir
