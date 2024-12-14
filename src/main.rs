@@ -135,6 +135,7 @@ fn main() {
     let num_chunks = ((total_seconds / chunk_duration).ceil() as usize);
 
     let mut combined_transcript = String::new();
+    let mut total_time = std::time::Duration::from_millis(0);
 
     for i in 0..num_chunks {
         let start_time = (i as f64) * chunk_duration;
@@ -208,18 +209,29 @@ fn main() {
         params.set_initial_prompt("experience");
         params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
 
+        // Record the start time for this chunk
         let st = std::time::Instant::now();
+
         state
             .full(params, &samples)
             .expect("failed to convert samples");
+
+        // Record the end time after transcription is complete
         let et = std::time::Instant::now();
 
+        // Calculate and print duration for this chunk
+        let chunk_time = (et - st);
+        println!("Chunk {} took {:.2}ms", i, chunk_time.as_millis());
+
+        // Add the chunk's time to the total time
+        total_time += chunk_time;
+
+        // Collect all segment texts into a single string for this chunk
+        let mut transcript = String::new();
         let num_segments = state
             .full_n_segments()
             .expect("failed to get number of segments");
 
-        // Collect all segment texts into a single string for this chunk
-        let mut transcript = String::new();
         for j in 0..num_segments {
             let segment = state
                 .full_get_segment_text(j)
@@ -249,5 +261,6 @@ fn main() {
         println!("No transcription available.");
     }
 
-    println!("took {}ms", (et - st).as_millis());
+    // Calculate and print total duration
+    println!("Total transcription took {:.2}ms", total_time.as_millis());
 }
