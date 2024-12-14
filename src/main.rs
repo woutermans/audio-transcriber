@@ -99,7 +99,7 @@ fn main() {
     }
     let arg2 = std::env::args()
         .nth(2)
-        .expect("second argument should be whisper model");
+        .unwrap_or("ggml-large-v3-turbo.bin".to_string());
     let whisper_path = Path::new(&arg2);
 
     // download_ggml_model::download_and_extract_model(&arg2, Path::new("models"), None).unwrap();
@@ -142,8 +142,16 @@ fn main() {
 
     let st = std::time::Instant::now();
 
-    let mut out_file = std::fs::File::create("output_timestamps.txt").unwrap();
-    let mut out_file_raw = std::fs::File::create("output_raw.txt").unwrap();
+    let mut out_file = std::fs::File::create(format!(
+        "{}_timestamps.txt",
+        audio_path.file_name().unwrap().to_string_lossy()
+    ))
+    .unwrap();
+    let mut out_file_raw = std::fs::File::create(format!(
+        "{}_raw.txt",
+        audio_path.file_name().unwrap().to_string_lossy()
+    ))
+    .unwrap();
     let mut last_timestamp = 0;
     let chunk_count = sample_batches.len();
     for samples in sample_batches {
@@ -178,7 +186,9 @@ fn main() {
                     .as_bytes(),
                 )
                 .unwrap();
-            out_file_raw.write_all(segment.as_bytes()).unwrap();
+            out_file_raw
+                .write_all(format!("{} ", segment).as_bytes())
+                .unwrap();
             e_time = end_timestamp;
         }
         last_timestamp = e_time;
