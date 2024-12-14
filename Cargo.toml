@@ -1,13 +1,1 @@
-[package]
-name = "audio-transcriber"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-hound = "3"
-whisper-rs = { version = "0.13", features = [] }
-reqwest = { version = "0.12", features = ["blocking"] }
-tempfile = "3.4"
-zip = "2"
-indicatif = "0.17"
-sevenz-rust = "0.6"
+path/to/example.js
