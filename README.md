@@ -56,7 +56,7 @@ The recommended method to install the `audio-transcriber` is via Cargo, Rust's p
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/yourusername/audio-transcriber.git
+   git clone https://github.com/woutermans/audio-transcriber.git
    cd audio-transcriber
    ```
 
