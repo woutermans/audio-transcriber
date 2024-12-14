@@ -138,6 +138,9 @@ fn main() {
     let num_segments = state
         .full_n_segments()
         .expect("failed to get number of segments");
+
+    // Collect all segment texts into a single string
+    let mut transcript = String::new();
     for i in 0..num_segments {
         let segment = state
             .full_get_segment_text(i)
@@ -148,7 +151,18 @@ fn main() {
         let end_timestamp = state
             .full_get_segment_t1(i)
             .expect("failed to get end timestamp");
-        println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
+        transcript.push_str(&format!("[{} - {}]: {}\n", start_timestamp, end_timestamp, segment));
     }
+
+    // Write the transcript to 'output.txt'
+    if !transcript.is_empty() {
+        let output_path = Path::new("output.txt");
+        fs::write(output_path, &transcript)
+            .expect("Failed to write to output.txt");
+        println!("Transcription written to {}", output_path.display());
+    } else {
+        println!("No transcription available.");
+    }
+
     println!("took {}ms", (et - st).as_millis());
 }
