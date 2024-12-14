@@ -59,7 +59,7 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if cfg!(target_os = "windows") {
-        let url = "https://objects.githubusercontent.com/github-production-release-asset-2e65be/292087234/a99db424-f32b-407e-810f-2ecb9ee16873?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20241214%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20241214T000504Z&X-Amz-Expires=300&X-Amz-Signature=f360238ecf53d898f99634a655e1253166d2dd595b7be8d4659297f724292db3&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3Dffmpeg-master-latest-win64-gpl.zip&response-content-type=application%2Foctet-stream";
+        let url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z";
 
         println!("Downloading FFmpeg for Windows...");
         let response = reqwest::blocking::get(url)?;
@@ -71,16 +71,10 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
         fs::write(temp_file.path(), &response.bytes()?)?;
 
         println!("Extracting FFmpeg...");
-        let unzip_status = Command::new("unzip")
-            .arg("-o")
-            .arg(temp_file.path())
-            .current_dir(".")
-            .spawn()?
-            .wait()?;
-
-        if !unzip_status.success() {
-            return Err("Failed to extract FFmpeg".into());
-        }
+        sevenz_rust::decompress_file(
+            temp_file.path(),
+            Path::new("."),
+        )?;
 
         // Remove the temporary zip file
         fs::remove_file(temp_file.path())?;
@@ -205,7 +199,7 @@ fn main() {
 
     let model_path = args
         .get(2)
-        .unwrap_or("ggml-large-v3-turbo.bin".to_string());
+        .unwrap_or(&"ggml-large-v3-turbo.bin".to_string());
     let whisper_path = Path::new(model_path);
 
     // Download FFmpeg if not already installed
