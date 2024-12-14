@@ -85,7 +85,7 @@ fn get_audio_duration(audio_path: &Path) -> f64 {
                     let hours: u64 = parts[0].parse().unwrap_or(0);
                     let minutes: u64 = parts[1].parse().unwrap_or(0);
                     let seconds: f64 = parts[2].parse().unwrap_or(0.0);
-                    return (hours * 3600) + (minutes * 60) + seconds;
+                    return (hours * 3600) as f64 + (minutes * 60) as f64 + seconds;
                 }
             }
         }
@@ -226,10 +226,10 @@ fn main() {
                 .expect("failed to get segment");
             let start_timestamp = state
                 .full_get_segment_t0(j)
-                .expect("failed to get start timestamp") + (start_time as u64);
+                .expect("failed to get start timestamp") + (start_time as i64);
             let end_timestamp = state
                 .full_get_segment_t1(j)
-                .expect("failed to get end timestamp") + (start_time as u64);
+                .expect("failed to get end timestamp") + (start_time as i64);
             transcript.push_str(&format!("[{} - {}]: {}\n", start_timestamp, end_timestamp, segment));
         }
 
