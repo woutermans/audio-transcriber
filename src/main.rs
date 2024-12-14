@@ -223,9 +223,6 @@ fn main() {
         let chunk_time = (et - st);
         println!("Chunk {} took {:.2}ms", i, chunk_time.as_millis());
 
-        // Add the chunk's time to the total time
-        total_time += chunk_time;
-
         // Collect all segment texts into a single string for this chunk
         let mut transcript = String::new();
         let num_segments = state
@@ -248,6 +245,9 @@ fn main() {
                 }
             }
         }
+
+        // Print the transcript immediately after processing the chunk
+        println!("Chunk {} transcript:\n{}", i, transcript);
 
         // Add the chunk's transcript to the combined transcript
         combined_transcript.push_str(&transcript);
