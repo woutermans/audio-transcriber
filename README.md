@@ -1,8 +1,8 @@
 # Audio Transcriber
 
 [![Build 
-Status](https://github.com/yourusername/audio-transcriber/workflows/CI/badge.svg)](https://github.com/yourusername/audio-transcriber/actions)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+Status](https://github.com/yourusername/audio-transcriber/workflows/CI/badge.svg)](https://github.com/woutermans/audio-transcriber/actions)
+[![License](https://img.shields.io/badge/License-Unlicense-blue.svg)](LICENSE)
 
 A robust tool for transcribing audio files using the Whisper model with support for various GPU backends: Vulkan, CUDA, HIPBLAS, and Metal.
 
@@ -155,4 +155,4 @@ Please ensure your code adheres to Rust's best practices and the project's codin
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is released under the Unlicense - see the [LICENSE](LICENSE) file for details.
