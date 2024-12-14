@@ -39,7 +39,7 @@ The `audio-transcriber` is a command-line tool designed to transcribe audio file
 
 ## Features
 
-- **Whisper Integration**: Utilizes the [whisper-rs](https://github.com/alyssaq/rust-whisper) library for accurate transcription.
+- **Whisper Integration**: Utilizes the [whisper-rs](https://github.com/tazz4843/whisper-rs) library for accurate transcription.
 - **Multi-backend Support**:
   - **Vulkan**: Leverages GPU acceleration using the Vulkan API. Suitable for cross-platform applications and modern GPUs.
   - **CUDA**: Optimized for NVIDIA GPUs with CUDA support. Ideal for high-performance computing on NVIDIA hardware.
@@ -139,10 +139,10 @@ Ensure that your system meets the hardware and software requirements for each ba
 1. **Basic Transcription**
 
    ```bash
-   cargo run --release --features vulkan /path/to/audio.wav [model_path]
+   cargo run --release --features vulkan /path/to/audio [model_path]
    ```
 
-   Replace `/path/to/audio.wav` with the path to your WAV file and optionally provide a custom model path (default is `ggml-large-v3-turbo.bin`).
+   Replace `/path/to/audio` with the path to your audio file and optionally provide a custom model path (default is `ggml-large-v3-turbo.bin`).
 
 2. **Handling Multiple Backends**
 
@@ -152,12 +152,12 @@ Ensure that your system meets the hardware and software requirements for each ba
 
 - Transcribe an audio file using CUDA:
   ```bash
-  cargo run --release --features cuda /path/to/audio.wav
+  cargo run --release --features cuda /path/to/audio
   ```
 
 - Transcribe an audio file using Metal on macOS:
   ```bash
-  cargo run --release --features metal /path/to/audio.wav
+  cargo run --release --features metal /path/to/audio
   ```
 
 ## Dependencies
