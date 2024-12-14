@@ -1,7 +1,6 @@
 use hound::{SampleFormat, WavReader};
 use std::path::Path;
 use std::process::Command;
-use std::{fs, io::Write};
 use tempfile::TempDir;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -101,7 +100,7 @@ fn main() {
         .nth(2)
         .expect("second argument should be whisper model");
 
-    download_ggml_model::download_model(&arg2, Path::new("models")).unwrap();
+    download_ggml_model::download_and_extract_model(&arg2, Path::new("models"), None).unwrap();
 
     let whisper_path = Path::new("models").join(&format!("{}.bin", arg2));
 
