@@ -61,6 +61,23 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn ensure_wav_compatibility(input_path: &Path, output_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    Command::new("ffmpeg")
+        .arg("-i")
+        .arg(input_path)
+        .arg("-acodec")
+        .arg("pcm_s16le")
+        .arg("-ar")
+        .arg("16000")
+        .arg("-ac")
+        .arg("1")
+        .arg(output_path)
+        .spawn()?
+        .wait()?;
+
+    Ok(())
+}
+
 fn main() {
     let arg1 = std::env::args()
         .nth(1)
@@ -77,7 +94,17 @@ fn main() {
         panic!("whisper file doesn't exist")
     }
 
-    let original_samples = parse_wav_file(audio_path);
+    // Create a temporary directory
+    let temp_dir = TempDir::new().expect("Failed to create temporary directory");
+
+    // Define the output path for the converted audio
+    let output_path = temp_dir.path().join("converted_audio.wav");
+
+    // Ensure the WAV file meets the requirements using FFmpeg
+    ensure_wav_compatibility(audio_path, &output_path)
+        .expect("Failed to ensure WAV compatibility");
+
+    let original_samples = parse_wav_file(&output_path);
     let mut samples = vec![0.0f32; original_samples.len()];
     whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
         .expect("failed to convert samples");
@@ -114,4 +141,7 @@ fn main() {
         println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
     }
     println!("took {}ms", (et - st).as_millis());
+
+    // Cleanup: Remove the temporary directory and its contents
+    temp_dir.close().expect("Failed to clean up temporary directory");
 }
