@@ -84,9 +84,10 @@ fn get_audio_duration(audio_path: &Path) -> Result<f64, Box<dyn std::error::Erro
 
     let output_str = String::from_utf8(duration_output.stdout)?;
 
-    let duration = output_str.trim().parse::<f64>().map_err(|e| {
-        format!("Failed to parse duration: {}", e)
-    })?;
+    let duration = output_str
+        .trim()
+        .parse::<f64>()
+        .map_err(|e| format!("Failed to parse duration: {}", e))?;
 
     Ok(duration)
 }
@@ -234,17 +235,13 @@ fn main() {
         for j in 0..num_segments {
             match state.full_get_segment_text(j) {
                 Ok(segment_text) => {
-                    if let Ok(valid_text) = std::str::from_utf8(&segment_text) {
-                        transcript.push_str(&format!(
-                            "[{} - {}]: {}\n",
-                            start_time as i64 + (state.full_get_segment_t0(j).unwrap() as i64),
-                            start_time as i64 + (state.full_get_segment_t1(j).unwrap() as i64),
-                            valid_text
-                        ));
-                    } else {
-                        println!("Skipping invalid UTF-8 segment at index {}", j);
-                    }
-                },
+                    transcript.push_str(&format!(
+                        "[{} - {}]: {}\n",
+                        start_time as i64 + (state.full_get_segment_t0(j).unwrap() as i64),
+                        start_time as i64 + (state.full_get_segment_t1(j).unwrap() as i64),
+                        segment_text
+                    ));
+                }
                 Err(e) => {
                     eprintln!("Error getting segment text at index {}: {:?}", j, e);
                     continue;
