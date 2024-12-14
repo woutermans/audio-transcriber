@@ -73,8 +73,6 @@ fn ensure_wav_compatibility(
     input_path: &Path,
     output_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    download_ggml_model::download_model("medium", Path::new("models"))?;
-
     Command::new("ffmpeg")
         .arg("-i")
         .arg(input_path)
@@ -101,11 +99,11 @@ fn main() {
     }
     let arg2 = std::env::args()
         .nth(2)
-        .expect("second argument should be path to Whisper model");
-    let whisper_path = Path::new(&arg2);
-    if !whisper_path.exists() {
-        panic!("whisper file doesn't exist")
-    }
+        .expect("second argument should be whisper model");
+
+    download_ggml_model::download_model(&arg2, Path::new("models")).unwrap();
+
+    let whisper_path = Path::new("models").join(&format!("{}.bin", arg2));
 
     // Create a temporary directory
     let temp_dir = TempDir::new().expect("Failed to create temporary directory");
