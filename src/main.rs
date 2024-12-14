@@ -71,9 +71,20 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
         fs::write(temp_file.path(), &response.bytes()?)?;
 
         println!("Extracting FFmpeg...");
-        sevenz_rust::decompress_file(
-            temp_file.path(),
-            Path::new("."),
+        sevenz_rust::decompress_file(temp_file.path(), Path::new("."))?;
+
+        // Find the ffmpeg folder "ffmpeg*"
+        let ffmpeg_folder = fs::read_dir(".")?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_type().ok().map_or(false, |t| t.is_dir()))
+            .filter(|entry| entry.file_name().to_str().unwrap().starts_with("ffmpeg"))
+            .next()
+            .unwrap();
+
+        // Move the ffmpeg folder to the current directory
+        fs::rename(
+            ffmpeg_folder.path().join("bin").join("ffmpeg.exe"),
+            Path::new("ffmpeg.exe"),
         )?;
 
         // Remove the temporary zip file
