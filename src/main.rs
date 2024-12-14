@@ -27,44 +27,34 @@ fn parse_wav_file(path: &Path) -> Vec<i16> {
 }
 
 fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
-    let os = if cfg!(target_os = "windows") {
-        "win"
-    } else if cfg!(target_os = "macos") {
-        "mac"
-    } else if cfg!(target_os = "linux") {
-        "lin"
-    } else {
-        return Err("Unsupported operating system".into());
-    };
+    if cfg!(target_os = "windows") {
+        let url = "https://objects.githubusercontent.com/github-production-release-asset-2e65be/292087234/a99db424-f32b-407e-810f-2ecb9ee16873?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20241214%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20241214T000504Z&X-Amz-Expires=300&X-Amz-Signature=f360238ecf53d898f99634a655e1253166d2dd595b7be8d4659297f724292db3&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3Dffmpeg-master-latest-win64-gpl.zip&response-content-type=application%2Foctet-stream";
 
-    let url = format!(
-        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-{}.zip",
-        os
-    );
+        println!("Downloading FFmpeg for Windows...");
+        let response = reqwest::blocking::get(url)?;
+        if !response.status().is_success() {
+            return Err("Failed to download FFmpeg".into());
+        }
 
-    println!("Downloading FFmpeg for {}...", os);
-    let response = reqwest::blocking::get(&url)?;
-    if !response.status().is_success() {
-        return Err("Failed to download FFmpeg".into());
+        let temp_file = tempfile::NamedTempFile::new()?;
+        fs::write(temp_file.path(), &response.bytes()?)?;
+
+        println!("Extracting FFmpeg...");
+        let unzip_status = Command::new("unzip")
+            .arg("-o")
+            .arg(temp_file.path())
+            .current_dir(".")
+            .spawn()?
+            .wait()?;
+
+        if !unzip_status.success() {
+            return Err("Failed to extract FFmpeg".into());
+        }
+
+        // Remove the temporary zip file
+        fs::remove_file(temp_file.path())?;
     }
 
-    let temp_file = tempfile::NamedTempFile::new()?;
-    fs::write(temp_file.path(), &response.bytes()?)?;
-
-    println!("Extracting FFmpeg...");
-    let unzip_status = Command::new("unzip")
-        .arg("-o")
-        .arg(temp_file.path())
-        .current_dir(".")
-        .spawn()?
-        .wait()?;
-
-    if !unzip_status.success() {
-        return Err("Failed to extract FFmpeg".into());
-    }
-
-    // Remove the temporary zip file
-    fs::remove_file(temp_file.path())?;
     Ok(())
 }
 

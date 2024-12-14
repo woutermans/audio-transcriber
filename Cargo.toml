@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 hound = "3"
-whisper-rs = { version = "0.13", features = ["vulkan"] }
-reqwest = "0.11"
+whisper-rs = { version = "0.13", features = ["hipblas"] }
+reqwest = { version = "0.12", features = ["blocking"] }
 tempfile = "3.4"
 zip = "0.5"
