@@ -1,40 +1,51 @@
 use hound::{SampleFormat, WavReader};
-use std::io::Write;
-use std::process::Command;
-use std::time::Duration;
-use std::{fs, path::Path};
+use std::fs;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 mod download_ggml_model;
 
-fn parse_wav_file(path: &Path) -> Vec<i16> {
-    let reader = WavReader::open(path).expect("failed to read file");
+fn parse_wav_file(path: &Path) -> io::Result<Vec<i16>> {
+    let reader = WavReader::open(path)?;
 
     if reader.spec().channels != 1 {
-        panic!("expected mono audio file");
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Expected mono audio file",
+        ));
     }
     if reader.spec().sample_format != SampleFormat::Int {
-        panic!("expected integer sample format");
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Expected integer sample format",
+        ));
     }
     if reader.spec().sample_rate != 16000 {
-        panic!("expected 16KHz sample rate");
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Expected 16KHz sample rate",
+        ));
     }
     if reader.spec().bits_per_sample != 16 {
-        panic!("expected 16 bits per sample");
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Expected 16 bits per sample",
+        ));
     }
 
-    reader
+    Ok(reader
         .into_samples::<i16>()
         .map(|x| x.expect("sample"))
-        .collect::<Vec<_>>()
+        .collect())
 }
 
 fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
-    // Check if already installed
+    // Check if ffmpeg is already installed
     if Command::new("ffmpeg").output().is_ok() {
         println!(
-            "ffmpeg is already installed. Skipping download. If you want to reinstall, delete the ffmpeg binary and run this script again."
+            "FFmpeg is already installed. Skipping download. If you want to reinstall, delete the FFmpeg binary and run this script again."
         );
         return Ok(());
     }
@@ -90,73 +101,44 @@ fn ensure_wav_compatibility(
     Ok(())
 }
 
-fn main() {
-    let arg1 = std::env::args()
-        .nth(1)
-        .expect("first argument should be path to WAV file");
-    let audio_path = Path::new(&arg1);
-    if !audio_path.exists() {
-        panic!("audio file doesn't exist");
-    }
-    let arg2 = std::env::args()
-        .nth(2)
-        .unwrap_or("ggml-large-v3-turbo.bin".to_string());
-    let whisper_path = Path::new(&arg2);
+fn create_temporary_directory() -> Result<TempDir, Box<dyn std::error::Error>> {
+    TempDir::new().map_err(|e| e.into())
+}
 
-    // download_ggml_model::download_and_extract_model(&arg2, Path::new("models"), None).unwrap();
-
-    // let whisper_path = Path::new("models").join(&format!("{}.bin", arg2));
-
-    // Create a temporary directory
-    let temp_dir = TempDir::new().expect("Failed to create temporary directory");
-
-    // Define the output path for the converted audio
-    let output_path = temp_dir.path().join("converted_audio.wav");
-
-    download_ffmpeg().expect("Failed to download ffmpeg. Please install ffmpeg and try again.");
-
-    // Ensure the WAV file meets the requirements using FFmpeg
-    ensure_wav_compatibility(audio_path, &output_path).expect("Failed to ensure WAV compatibility");
-
-    let original_samples = parse_wav_file(&output_path);
-    let mut samples = vec![0.0f32; original_samples.len()];
-
-    whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
-        .expect("failed to convert samples");
-
-    const SAMPLE_RATE: usize = 16000;
-    const N_FRAMES: usize = 30 * SAMPLE_RATE; // 30 seconds
-    let sample_batches = samples.chunks(N_FRAMES).into_iter().collect::<Vec<_>>();
-
+fn handle_transcription(
+    whisper_path: &Path,
+    samples: Vec<f32>,
+    sample_rate: usize,
+    chunk_size: usize,
+    input_path: &Path,
+) -> io::Result<()> {
     let ctx = WhisperContext::new_with_params(
         &whisper_path.to_string_lossy(),
         WhisperContextParameters {
             flash_attn: true,
             ..Default::default()
         },
-    )
-    .expect("failed to open model");
-    let mut state = ctx.create_state().expect("failed to create key");
+    )?;
+    
+    let mut state = ctx.create_state()?;
     let mut params = FullParams::new(SamplingStrategy::default());
     params.set_initial_prompt("experience");
-    // params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
-
-    let st = std::time::Instant::now();
-
+    
+    let sample_batches = samples.chunks(chunk_size).collect::<Vec<_>>();
+    let chunk_count = sample_batches.len();
+    
     let out_file_path = format!(
         "{}_timestamps.txt",
-        audio_path.file_stem().unwrap().to_string_lossy()
+        input_path.file_stem().unwrap().to_string_lossy()
     );
     let out_raw_path = format!(
         "{}_raw.txt",
-        audio_path.file_stem().unwrap().to_string_lossy()
+        input_path.file_stem().unwrap().to_string_lossy()
     );
-
-    let mut out_file = std::fs::File::create(&out_file_path).unwrap();
-    let mut out_file_raw = std::fs::File::create(&out_raw_path).unwrap();
-
-    let mut last_timestamp = 0;
-    let chunk_count = sample_batches.len();
+    
+    let mut out_file = fs::File::create(&out_file_path)?;
+    let mut out_file_raw = fs::File::create(&out_raw_path)?;
+    
     let pb = indicatif::ProgressBar::new(chunk_count as u64);
     pb.set_style(
         indicatif::ProgressStyle::default_bar()
@@ -167,55 +149,127 @@ fn main() {
             .progress_chars("#>-"),
     );
     pb.enable_steady_tick(Duration::from_millis(100));
+    
+    let mut last_timestamp = 0;
     for samples in sample_batches {
         state
             .full(params.clone(), &samples)
-            .expect("failed to convert samples");
-
-        let num_segments = state
-            .full_n_segments()
-            .expect("failed to get number of segments");
-
-        let mut e_time = 0;
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        
+        let num_segments = state.full_n_segments()?;
         for i in 0..num_segments {
-            let segment = state
-                .full_get_segment_text(i)
-                .expect("failed to get segment");
-            let start_timestamp = state
-                .full_get_segment_t0(i)
-                .expect("failed to get start timestamp");
-            let end_timestamp = state
-                .full_get_segment_t1(i)
-                .expect("failed to get end timestamp");
-            // println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
-            out_file
-                .write_all(
-                    &format!(
-                        "[{} - {}]: {}\n",
-                        start_timestamp + last_timestamp,
-                        end_timestamp + last_timestamp,
-                        segment
-                    )
-                    .as_bytes(),
+            let segment = state.full_get_segment_text(i)?;
+            let start_timestamp = state.full_get_segment_t0(i)?;
+            let end_timestamp = state.full_get_segment_t1(i)?;
+            
+            out_file.write_all(
+                format!(
+                    "[{} - {}]: {}\n",
+                    start_timestamp + last_timestamp,
+                    end_timestamp + last_timestamp,
+                    segment
                 )
-                .unwrap();
-            out_file_raw
-                .write_all(format!("{} ", segment).as_bytes())
-                .unwrap();
-            e_time = end_timestamp;
+                .as_bytes(),
+            )?;
+            out_file_raw.write_all(format!("{} ", segment).as_bytes())?;
         }
-        last_timestamp = e_time;
+        last_timestamp = end_timestamp;
         pb.inc(1);
     }
+    
     pb.finish_with_message("Done");
-    let et = std::time::Instant::now();
-    println!("took {}ms", (et - st).as_millis());
-    println!("processed {} chunks", chunk_count);
-    println!("Raw output written to {}.", out_raw_path);
-    println!("Timestamped output written to {}.", out_file_path);
+    
+    Ok(())
+}
 
-    // Cleanup: Remove the temporary directory and its contents
-    temp_dir
-        .close()
-        .expect("Failed to clean up temporary directory");
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() < 2 {
+        eprintln!("Usage: {} <path_to_wav_file> [model_path]", args[0]);
+        return;
+    }
+
+    let audio_path = Path::new(&args[1]);
+    if !audio_path.exists() {
+        eprintln!("Error: Audio file does not exist at {}", &args[1]);
+        return;
+    }
+
+    let model_path = args.get(2).unwrap_or(&"ggml-large-v3-turbo.bin".to_string());
+    let whisper_path = Path::new(model_path);
+
+    // Download FFmpeg if not already installed
+    match download_ffmpeg() {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("Failed to download FFmpeg: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    let temp_dir = match create_temporary_directory() {
+        Ok(dir) => dir,
+        Err(e) => {
+            eprintln!("Failed to create temporary directory: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let output_path = temp_dir.path().join("converted_audio.wav");
+
+    // Ensure WAV file compatibility using FFmpeg
+    match ensure_wav_compatibility(audio_path, &output_path) {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("Failed to ensure WAV compatibility: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    let original_samples = match parse_wav_file(&output_path) {
+        Ok(samples) => samples,
+        Err(e) => {
+            eprintln!("Failed to parse WAV file: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    let mut samples = vec![0.0f32; original_samples.len()];
+    match whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples) {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("Failed to convert integer audio samples: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    const SAMPLE_RATE: usize = 16000;
+    const CHUNK_SIZE: usize = 30 * SAMPLE_RATE; // 30 seconds
+
+    // Perform transcription
+    match handle_transcription(
+        whisper_path,
+        samples,
+        SAMPLE_RATE,
+        CHUNK_SIZE,
+        audio_path,
+    ) {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("Transcription failed: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Cleanup temporary directory
+    match temp_dir.close() {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("Failed to clean up temporary directory: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    println!("Raw output written to {}.", &format!("{}_raw.txt", audio_path.file_stem().unwrap().to_string_lossy()));
+    println!("Timestamped output written to {}.", &format!("{}_timestamps.txt", audio_path.file_stem().unwrap().to_string_lossy()));
 }
