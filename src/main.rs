@@ -1,5 +1,4 @@
 use hound::{SampleFormat, WavReader};
-use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -130,10 +129,10 @@ fn main() {
 
     // Calculate number of chunks
     let chunk_duration = 120.0; // two minutes in seconds
-    let num_chunks = ((total_seconds / chunk_duration).ceil() as usize);
+    let num_chunks = (total_seconds / chunk_duration).ceil() as usize;
 
     let mut combined_transcript = String::new();
-    let mut total_time = std::time::Duration::from_millis(0);
+    let total_time = std::time::Duration::from_millis(0);
 
     for i in 0..num_chunks {
         let start_time = (i as f64) * chunk_duration;
@@ -220,7 +219,7 @@ fn main() {
         let et = std::time::Instant::now();
 
         // Calculate and print duration for this chunk
-        let chunk_time = (et - st);
+        let chunk_time = et - st;
         println!("Chunk {} took {:.2}ms", i, chunk_time.as_millis());
 
         // Collect all segment texts into a single string for this chunk
@@ -237,8 +236,8 @@ fn main() {
 
                     transcript.push_str(&format!(
                         "[{} - {}]: {}\n",
-                        ((start_time + segment_t0) * 1000.0).round() as i64,
-                        ((start_time + segment_t1) * 1000.0).round() as i64,
+                        ((start_time + segment_t0 as f64) * 1000.0).round() as i64,
+                        ((start_time + segment_t1 as f64) * 1000.0).round() as i64,
                         segment_text
                     ));
                 }
