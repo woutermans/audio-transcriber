@@ -132,7 +132,7 @@ fn main() {
     let num_chunks = (total_seconds / chunk_duration).ceil() as usize;
 
     let mut combined_transcript = String::new();
-    let total_time = std::time::Duration::from_millis(0);
+    let mut total_time = std::time::Duration::from_millis(0);
 
     for i in 0..num_chunks {
         let start_time = (i as f64) * chunk_duration;
@@ -234,10 +234,14 @@ fn main() {
                     let segment_t0 = state.full_get_segment_t0(j).unwrap();
                     let segment_t1 = state.full_get_segment_t1(j).unwrap();
 
+                    // Calculate absolute timestamps based on total_seconds
+                    let start_abs = (start_time + segment_t0 as f64) * 1000.0;
+                    let end_abs = (start_time + segment_t1 as f64) * 1000.0;
+
                     transcript.push_str(&format!(
                         "[{} - {}]: {}\n",
-                        ((start_time + segment_t0 as f64) * 1000.0).round() as i64,
-                        ((start_time + segment_t1 as f64) * 1000.0).round() as i64,
+                        start_abs.round() as i64,
+                        end_abs.round() as i64,
                         segment_text
                     ));
                 }
