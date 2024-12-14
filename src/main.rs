@@ -63,7 +63,6 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn get_audio_duration(audio_path: &Path) -> Result<f64, Box<dyn std::error::Error>> {
-    // ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_audio_file
     let duration_output = Command::new("ffprobe")
         .args([
             "-v",
@@ -88,7 +87,6 @@ fn get_audio_duration(audio_path: &Path) -> Result<f64, Box<dyn std::error::Erro
     let duration = output_str.trim().parse::<f64>().map_err(|e| {
         format!("Failed to parse duration: {}", e)
     })?;
-
 
     Ok(duration)
 }
@@ -234,21 +232,24 @@ fn main() {
             .expect("failed to get number of segments");
 
         for j in 0..num_segments {
-            let segment = state
-                .full_get_segment_text(j)
-                .expect("failed to get segment");
-            let start_timestamp = state
-                .full_get_segment_t0(j)
-                .expect("failed to get start timestamp")
-                + (start_time as i64);
-            let end_timestamp = state
-                .full_get_segment_t1(j)
-                .expect("failed to get end timestamp")
-                + (start_time as i64);
-            transcript.push_str(&format!(
-                "[{} - {}]: {}\n",
-                start_timestamp, end_timestamp, segment
-            ));
+            match state.full_get_segment_text(j) {
+                Ok(segment_text) => {
+                    if let Ok(valid_text) = std::str::from_utf8(&segment_text) {
+                        transcript.push_str(&format!(
+                            "[{} - {}]: {}\n",
+                            start_time as i64 + (state.full_get_segment_t0(j).unwrap() as i64),
+                            start_time as i64 + (state.full_get_segment_t1(j).unwrap() as i64),
+                            valid_text
+                        ));
+                    } else {
+                        println!("Skipping invalid UTF-8 segment at index {}", j);
+                    }
+                },
+                Err(e) => {
+                    eprintln!("Error getting segment text at index {}: {:?}", j, e);
+                    continue;
+                }
+            }
         }
 
         // Add the chunk's transcript to the combined transcript
