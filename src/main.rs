@@ -10,6 +10,9 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 
 mod download_ggml_model;
 
+// If windows: use ./ffmpeg else use ffmpeg
+const FFMPEG_PATH: &str = if cfg!(windows) { "./ffmpeg.exe" } else { "ffmpeg" };
+
 fn parse_wav_file(path: &Path) -> io::Result<Vec<i16>> {
     let reader = WavReader::open(path).map_err(|e| {
         io::Error::new(
@@ -51,7 +54,7 @@ fn parse_wav_file(path: &Path) -> io::Result<Vec<i16>> {
 
 fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
     // Check if ffmpeg is already installed
-    if Command::new("ffmpeg").output().is_ok() {
+    if Command::new(FFMPEG_PATH).output().is_ok() {
         println!(
             "FFmpeg is already installed. Skipping download. If you want to reinstall, delete the FFmpeg binary and run this script again."
         );
@@ -108,7 +111,7 @@ fn ensure_wav_compatibility(
     input_path: &Path,
     output_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    Command::new("ffmpeg")
+    Command::new(FFMPEG_PATH)
         .arg("-i")
         .arg(input_path)
         .arg("-acodec")
