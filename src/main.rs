@@ -1,5 +1,6 @@
 use hound::{SampleFormat, WavReader};
-use std::path::Path;
+use std::io::Write;
+use std::{fs, path::Path};
 use std::process::Command;
 use tempfile::TempDir;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};

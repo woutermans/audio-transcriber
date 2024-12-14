@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use reqwest::Error as ReqwestError;
@@ -30,7 +31,9 @@ impl Default for DownloadConfig {
 /// # Returns
 ///
 /// A Result containing the path to the downloaded file or an error message.
-pub fn download_model(model: &str, config: Option<DownloadConfig>) -> Result<PathBuf, ReqwestError> {
+/// 
+/// Dyn err result
+pub fn download_model(model: &str, config: Option<DownloadConfig>) -> Result<PathBuf, Box<dyn Error>> {
     let config = config.unwrap_or_default();
 
     // Determine the source URL and prefix based on whether 'tdrz' is in the model name
@@ -54,7 +57,8 @@ pub fn download_model(model: &str, config: Option<DownloadConfig>) -> Result<Pat
     // Download the model using reqwest
     let response = reqwest::blocking::get(&url)?;
     if !response.status().is_success() {
-        return Err(ReqwestError::new(reqwest::ErrorKind::Status, format!("Failed to download model: {}", response.status())));
+
+    return Err(format!("Failed to download model from '{}'", url).into());
     }
 
     // Create a temporary file to store the downloaded data
