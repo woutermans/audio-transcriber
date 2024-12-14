@@ -158,7 +158,7 @@ fn main() {
     pb.set_style(
         indicatif::ProgressStyle::default_bar()
             .template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {eta}",
             )
             .unwrap()
             .progress_chars("##-"),
