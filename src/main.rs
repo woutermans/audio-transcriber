@@ -103,7 +103,7 @@ fn ensure_wav_compatibility(
     Ok(())
 }
 
-fn create_temporary_directory() -> Result<TempDir, Box<dyn std::error::Error>> {
+fn create_temporary_directory() -> Result<TempDir, Box<dyn Error>> {
     TempDir::new().map_err(|e| e.into())
 }
 
@@ -191,15 +191,17 @@ fn main() {
         return;
     }
 
+    // Introduce a temporary binding for the default model path
+    let binding = "ggml-large-v3-turbo.bin".to_string();
+
     let audio_path = Path::new(&args[1]);
     if !audio_path.exists() {
         eprintln!("Error: Audio file does not exist at {}", &args[1]);
         return;
     }
 
-    let model_path = args
-        .get(2)
-        .unwrap_or(&"ggml-large-v3-turbo.bin".to_string());
+    // Use the temporary binding in unwrap_or
+    let model_path = args.get(2).unwrap_or(&binding);
     let whisper_path = Path::new(model_path);
 
     // Download FFmpeg if not already installed
