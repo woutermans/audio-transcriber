@@ -142,7 +142,8 @@ fn main() {
 
     let st = std::time::Instant::now();
 
-    let mut out_file = std::fs::File::create("output.txt").unwrap();
+    let mut out_file = std::fs::File::create("output_timestamps.txt").unwrap();
+    let mut out_file_raw = std::fs::File::create("output_raw.txt").unwrap();
     let mut last_timestamp = 0;
     let chunk_count = sample_batches.len();
     for samples in sample_batches {
@@ -168,9 +169,16 @@ fn main() {
             println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
             out_file
                 .write_all(
-                    &format!("[{} - {}]: {}\n", start_timestamp + last_timestamp, end_timestamp + last_timestamp, segment).as_bytes(),
+                    &format!(
+                        "[{} - {}]: {}\n",
+                        start_timestamp + last_timestamp,
+                        end_timestamp + last_timestamp,
+                        segment
+                    )
+                    .as_bytes(),
                 )
                 .unwrap();
+            out_file_raw.write_all(segment.as_bytes()).unwrap();
             e_time = end_timestamp;
         }
         last_timestamp = e_time;
