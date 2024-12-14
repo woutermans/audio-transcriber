@@ -154,6 +154,15 @@ fn main() {
     .unwrap();
     let mut last_timestamp = 0;
     let chunk_count = sample_batches.len();
+    let pb = indicatif::ProgressBar::new(chunk_count as u64);
+    pb.set_style(
+        indicatif::ProgressStyle::default_bar()
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
+            )
+            .unwrap()
+            .progress_chars("##-"),
+    );
     for samples in sample_batches {
         state
             .full(params.clone(), &samples)
@@ -192,7 +201,9 @@ fn main() {
             e_time = end_timestamp;
         }
         last_timestamp = e_time;
+        pb.inc(1);
     }
+    pb.finish_with_message("Done");
     let et = std::time::Instant::now();
     println!("took {}ms", (et - st).as_millis());
     println!("processed {} chunks", chunk_count);
