@@ -4,6 +4,8 @@ use std::path::Path;
 use std::process::Command;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
+mod download_ggml_model;
+
 fn parse_wav_file(path: &Path) -> Vec<i16> {
     let reader = WavReader::open(path).expect("failed to read file");
 
