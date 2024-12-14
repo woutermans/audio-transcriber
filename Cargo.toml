@@ -1,0 +1,8 @@
+[package]
+name = "audio-transcriber"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hound = "3"
+whisper-rs = { version = "0.13", features = ["vulkan"] }
