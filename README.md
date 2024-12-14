@@ -27,6 +27,7 @@ A robust command-line tool for transcribing audio files using the powerful Whisp
 - [Usage](#usage)
   - [Basic Transcription](#basic-transcription)
   - [Handling Multiple Backends](#handling-multiple-backends)
+  - [Examples](#examples)
 - [Dependencies](#dependencies)
   - [Crate Dependencies](#crate-dependencies)
 - [Contributing](#contributing)
@@ -34,16 +35,16 @@ A robust command-line tool for transcribing audio files using the powerful Whisp
 
 ## Introduction
 
-The `audio-transcriber` is designed to transcribe audio files using the advanced Whisper model. It offers flexible support for different GPU backends, allowing you to leverage hardware acceleration with Vulkan, CUDA, HIPBLAS, and Metal. This ensures efficient processing of large audio files while maintaining high accuracy.
+The `audio-transcriber` is a command-line tool designed to transcribe audio files using the advanced Whisper model. It offers flexible support for different GPU backends, allowing you to leverage hardware acceleration with Vulkan, CUDA, HIPBLAS, and Metal. This ensures efficient processing of large audio files while maintaining high accuracy.
 
 ## Features
 
 - **Whisper Integration**: Utilizes the [whisper-rs](https://github.com/alyssaq/rust-whisper) library for accurate transcription.
 - **Multi-backend Support**:
-  - **Vulkan**: Leverages GPU acceleration using the Vulkan API.
-  - **CUDA**: Optimized for NVIDIA GPUs with CUDA support.
-  - **HIPBLAS**: Utilizes AMD GPUs with HIPBLAS for high-performance linear algebra operations.
-  - **Metal**: Supports Apple's Metal API for optimized performance on macOS.
+  - **Vulkan**: Leverages GPU acceleration using the Vulkan API. Suitable for cross-platform applications and modern GPUs.
+  - **CUDA**: Optimized for NVIDIA GPUs with CUDA support. Ideal for high-performance computing on NVIDIA hardware.
+  - **HIPBLAS**: Utilizes AMD GPUs with HIPBLAS for high-performance linear algebra operations. Best suited for AMD GPU users.
+  - **Metal**: Supports Apple's Metal API for optimized performance on macOS systems.
 
 ## Prerequisites
 
@@ -54,6 +55,16 @@ Before installing and running the `audio-transcriber`, ensure you have the follo
   
 - **FFmpeg**:
   - The program checks for FFmpeg's presence and downloads it if missing. However, manual installation is possible on specific operating systems.
+  - **Manual Installation:**
+    - **Windows**: Download FFmpeg from [here](http://ffmpeg.org/download.html) and extract the binaries to a directory in your PATH.
+    - **macOS**: Install via Homebrew:
+      ```bash
+      brew install ffmpeg
+      ```
+    - **Linux**: Install via package manager, e.g., on Ubuntu:
+      ```bash
+      sudo apt-get update && sudo apt-get install ffmpeg
+      ```
 
 ## Installation
 
@@ -90,8 +101,7 @@ The recommended method to install the `audio-transcriber` is via Cargo, Rust's p
    - **For Metal**
      ```bash
      cargo build --release --features metal
-     
-   **Note**: Some backends may require additional system dependencies. Please refer to the [Cargo.toml](./Cargo.toml) for specific feature dependencies.
+     ```
 
 3. **Using `cargo install`**
 
@@ -101,7 +111,7 @@ The recommended method to install the `audio-transcriber` is via Cargo, Rust's p
    cargo install audio-transcriber --features vulkan
    ```
 
-## Supported Backends Installation
+### Supported Backends Installation
 
 The `audio-transcriber` supports the following GPU backends for enhanced performance. Enabling a feature will enable the corresponding backend during compilation.
 
@@ -138,6 +148,18 @@ Ensure that your system meets the hardware and software requirements for each ba
 
    To switch between backends, enable the desired feature flag during compilation or use environment variables if supported.
 
+### Examples
+
+- Transcribe an audio file using CUDA:
+  ```bash
+  cargo run --release --features cuda /path/to/audio.wav
+  ```
+
+- Transcribe an audio file using Metal on macOS:
+  ```bash
+  cargo run --release --features metal /path/to/audio.wav
+  ```
+
 ## Dependencies
 
 The project relies on several crates for functionality:
@@ -162,6 +184,18 @@ Contributions are welcome! Please follow these steps:
 5. **Submit a Pull Request**
 
 Please ensure your code adheres to Rust's best practices and the project's coding standards.
+
+### Code of Conduct
+
+This project follows the [Contributor Covenant](https://www.contributorcovenant.org/) Code of Conduct. By participating, you are expected to uphold this code.
+
+### Contribution Workflow
+
+1. **Fork the Repository**
+2. **Create a New Branch**
+3. **Make Your Changes**
+4. **Run Tests**
+5. **Submit a Pull Request**
 
 ## License
 
