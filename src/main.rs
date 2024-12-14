@@ -1,7 +1,7 @@
 use hound::{SampleFormat, WavReader};
 use std::io::Write;
-use std::{fs, path::Path};
 use std::process::Command;
+use std::{fs, path::Path};
 use tempfile::TempDir;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -119,8 +119,13 @@ fn main() {
 
     let original_samples = parse_wav_file(&output_path);
     let mut samples = vec![0.0f32; original_samples.len()];
+
     whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
         .expect("failed to convert samples");
+
+    const SAMPLE_RATE: usize = 16000;
+    const N_FRAMES: usize = 30 * SAMPLE_RATE; // 30 seconds
+    let sample_batches = samples.chunks(N_FRAMES).into_iter().collect::<Vec<_>>();
 
     let ctx = WhisperContext::new_with_params(
         &whisper_path.to_string_lossy(),
@@ -136,35 +141,43 @@ fn main() {
     params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
 
     let st = std::time::Instant::now();
-    state
-        .full(params, &samples)
-        .expect("failed to convert samples");
-    let et = std::time::Instant::now();
-
-    let num_segments = state
-        .full_n_segments()
-        .expect("failed to get number of segments");
 
     let mut out_file = std::fs::File::create("output.txt").unwrap();
-    for i in 0..num_segments {
-        let segment = state
-            .full_get_segment_text(i)
-            .expect("failed to get segment");
-        let start_timestamp = state
-            .full_get_segment_t0(i)
-            .expect("failed to get start timestamp");
-        let end_timestamp = state
-            .full_get_segment_t1(i)
-            .expect("failed to get end timestamp");
-        println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
-        out_file
-            .write_all(
-                &format!("[{} - {}]: {}\n", start_timestamp, end_timestamp, segment).as_bytes(),
-            )
-            .unwrap();
+    let mut last_timestamp = 0;
+    let chunk_count = sample_batches.len();
+    for samples in sample_batches {
+        state
+            .full(params.clone(), &samples)
+            .expect("failed to convert samples");
+
+        let num_segments = state
+            .full_n_segments()
+            .expect("failed to get number of segments");
+
+        let mut e_time = 0;
+        for i in 0..num_segments {
+            let segment = state
+                .full_get_segment_text(i)
+                .expect("failed to get segment");
+            let start_timestamp = state
+                .full_get_segment_t0(i)
+                .expect("failed to get start timestamp");
+            let end_timestamp = state
+                .full_get_segment_t1(i)
+                .expect("failed to get end timestamp");
+            println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
+            out_file
+                .write_all(
+                    &format!("[{} - {}]: {}\n", start_timestamp + last_timestamp, end_timestamp + last_timestamp, segment).as_bytes(),
+                )
+                .unwrap();
+            e_time = end_timestamp;
+        }
+        last_timestamp = e_time;
     }
+    let et = std::time::Instant::now();
     println!("took {}ms", (et - st).as_millis());
-    println!("processed {} segments", num_segments);
+    println!("processed {} chunks", chunk_count);
     println!("Output written to output.txt");
 
     // Cleanup: Remove the temporary directory and its contents
