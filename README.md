@@ -1,7 +1,5 @@
 # Audio Transcriber
 
-[![Build 
-Status](https://github.com/yourusername/audio-transcriber/workflows/CI/badge.svg)](https://github.com/woutermans/audio-transcriber/actions)
 [![License](https://img.shields.io/badge/License-Unlicense-blue.svg)](LICENSE)
 
 A robust tool for transcribing audio files using the Whisper model with support for various GPU backends: Vulkan, CUDA, HIPBLAS, and Metal.
