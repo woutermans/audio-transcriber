@@ -1,10 +1,10 @@
 use hound::{SampleFormat, WavReader};
+use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 use tempfile::TempDir;
-use serde_json::Value;
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 mod download_ggml_model;
 
@@ -63,32 +63,34 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn get_audio_duration(audio_path: &Path) -> Result<f64, Box<dyn std::error::Error>> {
-    let duration_output = Command::new("ffmpeg")
+    // ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 input_audio_file
+    let duration_output = Command::new("ffprobe")
         .args([
-            "-i",
-            &audio_path.to_string_lossy(),
-            "-of", "json",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            audio_path.to_str().unwrap(),
         ])
         .output()
         .expect("Failed to run FFmpeg");
+
+    println!("{}", String::from_utf8_lossy(&duration_output.stdout));
 
     if !duration_output.status.success() {
         return Err(format!("FFmpeg failed with status: {}", duration_output.status).into());
     }
 
     let output_str = String::from_utf8(duration_output.stdout)?;
-    
-    // Parse the JSON output
-    let json: Value = serde_json::from_str(&output_str)?;
 
-    if let Some(durations) = json.get("format").and_then(|f| f.get("duration")) {
-        match durations.as_f64() {
-            Some(duration) => return Ok(duration),
-            None => return Err("Duration not found in JSON output".into()),
-        }
-    }
+    let duration = output_str.trim().parse::<f64>().map_err(|e| {
+        format!("Failed to parse duration: {}", e)
+    })?;
 
-    Err("Failed to extract duration from FFmpeg output".into())
+
+    Ok(duration)
 }
 
 fn main() {
@@ -171,7 +173,9 @@ fn main() {
             .expect("FFmpeg extraction failed");
 
         // Convert the chunk to WAV format
-        let converted_chunk_path = temp_dir.path().join(format!("temp_converted_chunk_{}.wav", i));
+        let converted_chunk_path = temp_dir
+            .path()
+            .join(format!("temp_converted_chunk_{}.wav", i));
         Command::new("ffmpeg")
             .args([
                 "-i",
@@ -235,11 +239,16 @@ fn main() {
                 .expect("failed to get segment");
             let start_timestamp = state
                 .full_get_segment_t0(j)
-                .expect("failed to get start timestamp") + (start_time as i64);
+                .expect("failed to get start timestamp")
+                + (start_time as i64);
             let end_timestamp = state
                 .full_get_segment_t1(j)
-                .expect("failed to get end timestamp") + (start_time as i64);
-            transcript.push_str(&format!("[{} - {}]: {}\n", start_timestamp, end_timestamp, segment));
+                .expect("failed to get end timestamp")
+                + (start_time as i64);
+            transcript.push_str(&format!(
+                "[{} - {}]: {}\n",
+                start_timestamp, end_timestamp, segment
+            ));
         }
 
         // Add the chunk's transcript to the combined transcript
@@ -251,8 +260,7 @@ fn main() {
     // Write the final transcript to 'output.txt'
     if !combined_transcript.is_empty() {
         let output_path = Path::new("output.txt");
-        fs::write(output_path, &combined_transcript)
-            .expect("Failed to write to output.txt");
+        fs::write(output_path, &combined_transcript).expect("Failed to write to output.txt");
         println!("Transcription written to {}", output_path.display());
     } else {
         println!("No transcription available.");
