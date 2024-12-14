@@ -1,5 +1,5 @@
 use hound::{SampleFormat, WavReader};
-use std::fs;
+use std::{fs, io::Write};
 use std::path::Path;
 use std::process::Command;
 use tempfile::TempDir;
@@ -128,6 +128,8 @@ fn main() {
     let num_segments = state
         .full_n_segments()
         .expect("failed to get number of segments");
+
+    let mut out_file = std::fs::File::create("output.txt").unwrap();
     for i in 0..num_segments {
         let segment = state
             .full_get_segment_text(i)
@@ -139,8 +141,11 @@ fn main() {
             .full_get_segment_t1(i)
             .expect("failed to get end timestamp");
         println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
+        out_file.write_all(&format!("[{} - {}]: {}\n", start_timestamp, end_timestamp, segment).as_bytes()).unwrap();
     }
     println!("took {}ms", (et - st).as_millis());
+    println!("processed {} segments", num_segments);
+    println!("Output written to output.txt");
 
     // Cleanup: Remove the temporary directory and its contents
     temp_dir.close().expect("Failed to clean up temporary directory");
