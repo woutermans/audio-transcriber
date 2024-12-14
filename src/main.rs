@@ -82,9 +82,18 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
             .unwrap();
 
         // Move the ffmpeg folder to the current directory
+        let src = ffmpeg_folder.path().join("bin").join("ffmpeg.exe");
+        let dst =Path::new("ffmpeg.exe");
+
+        println!(
+            "{} -> {}",
+            src.to_str().unwrap(),
+            dst.to_str().unwrap()
+        );
+
         fs::rename(
-            ffmpeg_folder.path().join("bin").join("ffmpeg.exe"),
-            Path::new("ffmpeg.exe"),
+             src,
+             dst,
         )?;
 
         // Remove the temporary zip file
