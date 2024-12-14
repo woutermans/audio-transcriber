@@ -1,4 +1,4 @@
-name: Rust Build
+name: Rust CI
 
 on:
   push:
@@ -15,95 +15,67 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        backend: [vulkan, cuda, hipblas, metal]
-      fail-fast: false
+        backend: 
+          - vulkan
+          - ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'windows-latest' && 'cuda' }}
+          - ${{ matrix.os == 'ubuntu-latest' && 'hipblas' }}
+          - ${{ matrix.os == 'macos-latest' && 'metal' }}
+        exclude:
+          - os: macos-latest
+            backend: cuda
+          - os: windows-latest
+            backend: hipblas
+          - os: ubuntu-latest
+            backend: metal
+          - os: windows-latest
+            backend: hipblas
+          - os: macos-latest
+            backend: hipblas
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+      - name: Install Rust toolchain
+        uses: actions/setup-rust@v1
         with:
-          toolchain: stable
-          override: true
-
-      - name: Cache Cargo
-        uses: actions/cache@v2
-        with:
-          path: ~/.cargo
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          rust-version: stable
+          component: rustfmt
 
       - name: Install dependencies
         run: |
-          if [ ${{ matrix.os }} == 'ubuntu-latest' ]; then
-            sudo apt-get update
-            if [ ${{ matrix.backend }} == 'vulkan' ]; then
-              sudo apt-get install -y libvulkan-dev
-            elif [ ${{ matrix.backend }} == 'cuda' ]; then
-              # Install CUDA toolkit
-              wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
-              sudo mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
-              wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2004-11-8-local_11.8.0-520.61.05-1_amd64.deb
-              sudo dpkg -i cuda-repo-ubuntu2004-11-8-local_11.8.0-520.61.05-1_amd64.deb
-              sudo apt-get update
-              sudo apt-get install -y cuda
-            elif [ ${{ matrix.backend }} == 'hipblas' ]; then
-              # Install ROCm for HIPBLAS support
-              sudo apt install -y wget
-              wget -qO - https://repo.radeon.com/rocm/keys/rocm.gpg.key | sudo apt-key add -
-              sudo add-apt-repository 'deb [arch=amd64] https://repo.radeon.com/rocm/apt/5.4.2/ubuntu/ focal main'
-              sudo apt-get update
-              sudo apt-get install -y rocm-hip
-            fi
-          elif [ ${{ matrix.os }} == 'windows-latest' ]; then
-            if [ ${{ matrix.backend }} == 'vulkan' ]; then
-              # Install Vulkan SDK
-              choco install vulkan-sdk
-            elif [ ${{ matrix.backend }} == 'cuda' ]; then
-              # Install CUDA Toolkit for Windows
-              # Note: This might require a custom installer step
-              echo "CUDA installation on Windows is not automated."
-            elif [ ${{ matrix.backend }} == 'hipblas' ]; then
-              echo "HIPBLAS is not supported on Windows."
-              exit 0
-            fi
-          elif [ ${{ matrix.os }} == 'macos-latest' ]; then
-            if [ ${{ matrix.backend }} == 'metal' ]; then
-              # Ensure Xcode Command Line Tools are installed
-              xcode-select --install
-            fi
-          fi
+          sudo apt-get update
+          sudo apt-get install -y libvulkan1
+          # Add additional dependencies based on backend
 
-      - name: Build with Backend
+      - name: Build with specified backend
         run: |
-          if [ ${{ matrix.backend }} == 'metal' ] && [ ${{ matrix.os }} != 'macos-latest' ]; then
-            echo "Skipping metal backend on non-macos OS."
-            exit 0
-          fi
-          if [ ${{ matrix.backend }} == 'hipblas' ] && [ ${{ matrix.os }} != 'ubuntu-latest' ]; then
-            echo "Skipping hipblas backend on non-ubuntu OS."
-            exit 0
-          fi
           cargo build --release --features ${{ matrix.backend }}
-        env:
-          RUSTFLAGS: "-C link-arg=-s"
+        if: matrix.backend != ''
 
-      - name: Upload Artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v2
-        if: success()
         with:
           name: audio-transcriber-${{ matrix.os }}-${{ matrix.backend }}
           path: target/release/audio-transcriber
 
-      - name: Upload to Release
-        uses: actions/upload-release-asset@v1
-        if: success() && github.event_name == 'push'
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ github.release.upload_url }}
+          tag_name: v${{ github.run_number }}
+          release_name: Release ${{ github.run_number }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: target/release/audio-transcriber
           asset_name: audio-transcriber-${{ matrix.os }}-${{ matrix.backend }}.zip
           asset_content_type: application/zip
