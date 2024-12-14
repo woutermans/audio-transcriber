@@ -1,7 +1,7 @@
 use hound::{SampleFormat, WavReader};
-use std::{fs, io::Write};
 use std::path::Path;
 use std::process::Command;
+use std::{fs, io::Write};
 use tempfile::TempDir;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
@@ -30,6 +30,14 @@ fn parse_wav_file(path: &Path) -> Vec<i16> {
 }
 
 fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
+    // Check if already installed
+    if Command::new("ffmpeg").output().is_ok() {
+        println!(
+            "ffmpeg is already installed. Skipping download. If you want to reinstall, delete the ffmpeg binary and run this script again."
+        );
+        return Ok(());
+    }
+
     if cfg!(target_os = "windows") {
         let url = "https://objects.githubusercontent.com/github-production-release-asset-2e65be/292087234/a99db424-f32b-407e-810f-2ecb9ee16873?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=releaseassetproduction%2F20241214%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20241214T000504Z&X-Amz-Expires=300&X-Amz-Signature=f360238ecf53d898f99634a655e1253166d2dd595b7be8d4659297f724292db3&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3Dffmpeg-master-latest-win64-gpl.zip&response-content-type=application%2Foctet-stream";
 
@@ -61,7 +69,12 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn ensure_wav_compatibility(input_path: &Path, output_path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn ensure_wav_compatibility(
+    input_path: &Path,
+    output_path: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    download_ggml_model::download_model("medium", Path::new("models"))?;
+
     Command::new("ffmpeg")
         .arg("-i")
         .arg(input_path)
@@ -100,9 +113,10 @@ fn main() {
     // Define the output path for the converted audio
     let output_path = temp_dir.path().join("converted_audio.wav");
 
+    download_ffmpeg().expect("Failed to download ffmpeg. Please install ffmpeg and try again.");
+
     // Ensure the WAV file meets the requirements using FFmpeg
-    ensure_wav_compatibility(audio_path, &output_path)
-        .expect("Failed to ensure WAV compatibility");
+    ensure_wav_compatibility(audio_path, &output_path).expect("Failed to ensure WAV compatibility");
 
     let original_samples = parse_wav_file(&output_path);
     let mut samples = vec![0.0f32; original_samples.len()];
@@ -111,7 +125,10 @@ fn main() {
 
     let ctx = WhisperContext::new_with_params(
         &whisper_path.to_string_lossy(),
-        WhisperContextParameters::default(),
+        WhisperContextParameters {
+            flash_attn: true,
+            ..Default::default()
+        },
     )
     .expect("failed to open model");
     let mut state = ctx.create_state().expect("failed to create key");
@@ -141,12 +158,18 @@ fn main() {
             .full_get_segment_t1(i)
             .expect("failed to get end timestamp");
         println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
-        out_file.write_all(&format!("[{} - {}]: {}\n", start_timestamp, end_timestamp, segment).as_bytes()).unwrap();
+        out_file
+            .write_all(
+                &format!("[{} - {}]: {}\n", start_timestamp, end_timestamp, segment).as_bytes(),
+            )
+            .unwrap();
     }
     println!("took {}ms", (et - st).as_millis());
     println!("processed {} segments", num_segments);
     println!("Output written to output.txt");
 
     // Cleanup: Remove the temporary directory and its contents
-    temp_dir.close().expect("Failed to clean up temporary directory");
+    temp_dir
+        .close()
+        .expect("Failed to clean up temporary directory");
 }
