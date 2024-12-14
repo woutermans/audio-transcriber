@@ -98,6 +98,7 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
 
         // Remove the temporary zip file
         fs::remove_file(temp_file.path())?;
+        fs::remove_dir_all(ffmpeg_folder.path())?;
     }
 
     Ok(())
