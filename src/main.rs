@@ -1,6 +1,7 @@
 use hound::{SampleFormat, WavReader};
 use std::io::Write;
 use std::process::Command;
+use std::time::Duration;
 use std::{fs, path::Path};
 use tempfile::TempDir;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
@@ -138,7 +139,7 @@ fn main() {
     let mut state = ctx.create_state().expect("failed to create key");
     let mut params = FullParams::new(SamplingStrategy::default());
     params.set_initial_prompt("experience");
-    params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
+    // params.set_progress_callback_safe(|progress| println!("Progress callback: {}%", progress));
 
     let st = std::time::Instant::now();
 
@@ -158,11 +159,12 @@ fn main() {
     pb.set_style(
         indicatif::ProgressStyle::default_bar()
             .template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos:>7}/{len:7} {eta}",
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
             )
             .unwrap()
-            .progress_chars("##-"),
+            .progress_chars("#>-"),
     );
+    pb.enable_steady_tick(Duration::from_millis(100));
     for samples in sample_batches {
         state
             .full(params.clone(), &samples)
@@ -183,7 +185,7 @@ fn main() {
             let end_timestamp = state
                 .full_get_segment_t1(i)
                 .expect("failed to get end timestamp");
-            println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
+            // println!("[{} - {}]: {}", start_timestamp, end_timestamp, segment);
             out_file
                 .write_all(
                     &format!(
