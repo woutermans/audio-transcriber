@@ -1,14 +1,22 @@
 use hound::{SampleFormat, WavReader};
+use std::error::Error;
 use std::fs;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::process::Command;
+use std::time::Duration;
 use tempfile::TempDir;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 mod download_ggml_model;
 
 fn parse_wav_file(path: &Path) -> io::Result<Vec<i16>> {
-    let reader = WavReader::open(path)?;
+    let reader = WavReader::open(path).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::Other,
+            format!("Error opening WAV file: {}", e),
+        )
+    })?;
 
     if reader.spec().channels != 1 {
         return Err(io::Error::new(
@@ -108,10 +116,9 @@ fn create_temporary_directory() -> Result<TempDir, Box<dyn std::error::Error>> {
 fn handle_transcription(
     whisper_path: &Path,
     samples: Vec<f32>,
-    sample_rate: usize,
     chunk_size: usize,
     input_path: &Path,
-) -> io::Result<()> {
+) -> Result<(), Box<dyn Error>> {
     let ctx = WhisperContext::new_with_params(
         &whisper_path.to_string_lossy(),
         WhisperContextParameters {
@@ -119,14 +126,14 @@ fn handle_transcription(
             ..Default::default()
         },
     )?;
-    
+
     let mut state = ctx.create_state()?;
     let mut params = FullParams::new(SamplingStrategy::default());
     params.set_initial_prompt("experience");
-    
+
     let sample_batches = samples.chunks(chunk_size).collect::<Vec<_>>();
     let chunk_count = sample_batches.len();
-    
+
     let out_file_path = format!(
         "{}_timestamps.txt",
         input_path.file_stem().unwrap().to_string_lossy()
@@ -135,10 +142,10 @@ fn handle_transcription(
         "{}_raw.txt",
         input_path.file_stem().unwrap().to_string_lossy()
     );
-    
+
     let mut out_file = fs::File::create(&out_file_path)?;
     let mut out_file_raw = fs::File::create(&out_raw_path)?;
-    
+
     let pb = indicatif::ProgressBar::new(chunk_count as u64);
     pb.set_style(
         indicatif::ProgressStyle::default_bar()
@@ -149,19 +156,20 @@ fn handle_transcription(
             .progress_chars("#>-"),
     );
     pb.enable_steady_tick(Duration::from_millis(100));
-    
+
     let mut last_timestamp = 0;
     for samples in sample_batches {
         state
             .full(params.clone(), &samples)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        
+
         let num_segments = state.full_n_segments()?;
+        let mut end_timestamp = 0;
         for i in 0..num_segments {
             let segment = state.full_get_segment_text(i)?;
             let start_timestamp = state.full_get_segment_t0(i)?;
-            let end_timestamp = state.full_get_segment_t1(i)?;
-            
+            end_timestamp = state.full_get_segment_t1(i)?;
+
             out_file.write_all(
                 format!(
                     "[{} - {}]: {}\n",
@@ -176,9 +184,9 @@ fn handle_transcription(
         last_timestamp = end_timestamp;
         pb.inc(1);
     }
-    
+
     pb.finish_with_message("Done");
-    
+
     Ok(())
 }
 
@@ -195,7 +203,9 @@ fn main() {
         return;
     }
 
-    let model_path = args.get(2).unwrap_or(&"ggml-large-v3-turbo.bin".to_string());
+    let model_path = args
+        .get(2)
+        .unwrap_or("ggml-large-v3-turbo.bin".to_string());
     let whisper_path = Path::new(model_path);
 
     // Download FFmpeg if not already installed
@@ -247,13 +257,7 @@ fn main() {
     const CHUNK_SIZE: usize = 30 * SAMPLE_RATE; // 30 seconds
 
     // Perform transcription
-    match handle_transcription(
-        whisper_path,
-        samples,
-        SAMPLE_RATE,
-        CHUNK_SIZE,
-        audio_path,
-    ) {
+    match handle_transcription(whisper_path, samples, CHUNK_SIZE, audio_path) {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Transcription failed: {}", e);
@@ -270,6 +274,18 @@ fn main() {
         }
     };
 
-    println!("Raw output written to {}.", &format!("{}_raw.txt", audio_path.file_stem().unwrap().to_string_lossy()));
-    println!("Timestamped output written to {}.", &format!("{}_timestamps.txt", audio_path.file_stem().unwrap().to_string_lossy()));
+    println!(
+        "Raw output written to {}.",
+        &format!(
+            "{}_raw.txt",
+            audio_path.file_stem().unwrap().to_string_lossy()
+        )
+    );
+    println!(
+        "Timestamped output written to {}.",
+        &format!(
+            "{}_timestamps.txt",
+            audio_path.file_stem().unwrap().to_string_lossy()
+        )
+    );
 }
