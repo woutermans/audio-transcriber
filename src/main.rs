@@ -100,10 +100,11 @@ fn main() {
     let arg2 = std::env::args()
         .nth(2)
         .expect("second argument should be whisper model");
+    let whisper_path = Path::new(&arg2);
 
-    download_ggml_model::download_and_extract_model(&arg2, Path::new("models"), None).unwrap();
+    // download_ggml_model::download_and_extract_model(&arg2, Path::new("models"), None).unwrap();
 
-    let whisper_path = Path::new("models").join(&format!("{}.bin", arg2));
+    // let whisper_path = Path::new("models").join(&format!("{}.bin", arg2));
 
     // Create a temporary directory
     let temp_dir = TempDir::new().expect("Failed to create temporary directory");
