@@ -232,10 +232,13 @@ fn main() {
         for j in 0..num_segments {
             match state.full_get_segment_text(j) {
                 Ok(segment_text) => {
+                    let segment_t0 = state.full_get_segment_t0(j).unwrap();
+                    let segment_t1 = state.full_get_segment_t1(j).unwrap();
+
                     transcript.push_str(&format!(
                         "[{} - {}]: {}\n",
-                        start_time as i64 + (state.full_get_segment_t0(j).unwrap() as i64),
-                        start_time as i64 + (state.full_get_segment_t1(j).unwrap() as i64),
+                        ((start_time + segment_t0) * 1000.0).round() as i64,
+                        ((start_time + segment_t1) * 1000.0).round() as i64,
                         segment_text
                     ));
                 }
