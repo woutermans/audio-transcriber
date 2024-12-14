@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 hound = "3"
 whisper-rs = { version = "0.13", features = ["vulkan"] }
+reqwest = "0.11"
+tempfile = "3.4"
+zip = "0.5"

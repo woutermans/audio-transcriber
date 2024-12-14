@@ -1,7 +1,7 @@
-#![allow(clippy::uninlined_format_args)]
-
 use hound::{SampleFormat, WavReader};
+use std::fs;
 use std::path::Path;
+use std::process::Command;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 fn parse_wav_file(path: &Path) -> Vec<i16> {
@@ -26,14 +26,73 @@ fn parse_wav_file(path: &Path) -> Vec<i16> {
         .collect::<Vec<_>>()
 }
 
+fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
+    let os = if cfg!(target_os = "windows") {
+        "win"
+    } else if cfg!(target_os = "macos") {
+        "mac"
+    } else if cfg!(target_os = "linux") {
+        "lin"
+    } else {
+        return Err("Unsupported operating system".into());
+    };
+
+    let url = format!(
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-{}.zip",
+        os
+    );
+
+    println!("Downloading FFmpeg for {}...", os);
+    let response = reqwest::blocking::get(&url)?;
+    if !response.status().is_success() {
+        return Err("Failed to download FFmpeg".into());
+    }
+
+    let temp_file = tempfile::NamedTempFile::new()?;
+    fs::write(temp_file.path(), &response.bytes()?)?;
+
+    println!("Extracting FFmpeg...");
+    let unzip_status = Command::new("unzip")
+        .arg("-o")
+        .arg(temp_file.path())
+        .current_dir(".")
+        .spawn()?
+        .wait()?;
+
+    if !unzip_status.success() {
+        return Err("Failed to extract FFmpeg".into());
+    }
+
+    // Remove the temporary zip file
+    fs::remove_file(temp_file.path())?;
+    Ok(())
+}
+
 fn main() {
     let arg1 = std::env::args()
         .nth(1)
-        .expect("first argument should be path to WAV file");
+        .expect("first argument should be path to audio file");
     let audio_path = Path::new(&arg1);
     if !audio_path.exists() {
         panic!("audio file doesn't exist");
     }
+
+    // Check if FFmpeg is installed
+    match Command::new("ffmpeg").arg("-version").output() {
+        Ok(output) => {
+            if output.status.success() {
+                println!("FFmpeg is already installed.");
+            } else {
+                println!("FFmpeg is not installed. Downloading now...");
+                download_ffmpeg().expect("Failed to install FFmpeg");
+            }
+        }
+        Err(_) => {
+            println!("FFmpeg is not installed. Downloading now...");
+            download_ffmpeg().expect("Failed to install FFmpeg");
+        }
+    }
+
     let arg2 = std::env::args()
         .nth(2)
         .expect("second argument should be path to Whisper model");
@@ -42,7 +101,28 @@ fn main() {
         panic!("whisper file doesn't exist")
     }
 
-    let original_samples = parse_wav_file(audio_path);
+    // Convert audio to WAV format using FFmpeg
+    println!("Converting audio to WAV...");
+    Command::new("ffmpeg")
+        .args([
+            "-i",
+            &audio_path.to_string_lossy(),
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-acodec",
+            "pcm_s16le",
+            "temp_converted.wav",
+        ])
+        .spawn()
+        .expect("Failed to run FFmpeg")
+        .wait()
+        .expect("FFmpeg conversion failed");
+
+    let original_samples = parse_wav_file(Path::new("temp_converted.wav"));
+    fs::remove_file("temp_converted.wav").unwrap();
+
     let mut samples = vec![0.0f32; original_samples.len()];
     whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples)
         .expect("failed to convert samples");
