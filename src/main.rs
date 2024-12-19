@@ -185,11 +185,12 @@ fn handle_transcription(
     samples: Vec<f32>,
     chunk_size: usize,
     input_path: &Path,
+    flash_attn: bool,
 ) -> Result<(), Box<dyn Error>> {
     let ctx = WhisperContext::new_with_params(
         &whisper_path.to_string_lossy(),
         WhisperContextParameters {
-            flash_attn: true,
+            flash_attn,
             ..Default::default()
         },
     )?;
@@ -358,7 +359,7 @@ fn main() {
     const CHUNK_SIZE: usize = 30 * SAMPLE_RATE; // 30 seconds
 
     // Perform transcription
-    match handle_transcription(whisper_path, samples, CHUNK_SIZE, audio_path) {
+    match handle_transcription(whisper_path, samples, CHUNK_SIZE, audio_path, args.fa) {
         Ok(_) => (),
         Err(e) => {
             eprintln!("Transcription failed: {}", e);
