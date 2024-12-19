@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-Unlicense-blue.svg)](LICENSE)
 
-A robust command-line tool for transcribing audio files using the powerful Whisper model, supported by various GPU backends: Vulkan, CUDA, HIPBLAS, and Metal.
+The `audio-transcriber` is a command-line tool designed to transcribe audio files using the advanced Whisper model. It offers flexible support for different GPU backends, allowing you to leverage hardware acceleration with Vulkan, CUDA, HIPBLAS, and Metal.
 
 ## Table of Contents
 
@@ -35,7 +35,7 @@ A robust command-line tool for transcribing audio files using the powerful Whisp
 
 ## Introduction
 
-The `audio-transcriber` is a command-line tool designed to transcribe audio files using the advanced Whisper model. It offers flexible support for different GPU backends, allowing you to leverage hardware acceleration with Vulkan, CUDA, HIPBLAS, and Metal. This ensures efficient processing of large audio files while maintaining high accuracy.
+The `audio-transcriber` is a command-line tool designed to transcribe audio files using the advanced Whisper model. It offers flexible support for different GPU backends, allowing you to leverage hardware acceleration with Vulkan, CUDA, HIPBLAS, and Metal.
 
 ## Features
 
@@ -183,7 +183,7 @@ Contributions are welcome! Please follow these steps:
    ```
 5. **Submit a Pull Request**
 
-Please ensure your code adheres to Rust's best practices and the project's coding standards.
+Ensure your code adheres to Rust's best practices and the project's coding standards.
 
 ### Code of Conduct
 
