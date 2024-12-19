@@ -7,6 +7,7 @@ use std::process::Command;
 use std::time::Duration;
 use tempfile::TempDir;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+use clap::Parser;
 
 mod download_ggml_model;
 
@@ -15,6 +16,11 @@ const FFMPEG_PATH: &str = if cfg!(windows) {
     "./ffmpeg.exe"
 } else {
     "ffmpeg"
+};
+const YT_DLP_PATH: &str = if cfg!(windows) {
+    "./yt-dlp.exe"
+} else {
+    "yt-dlp"
 };
 
 fn parse_wav_file(path: &Path) -> io::Result<Vec<i16>> {
@@ -99,6 +105,18 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
         // Remove the temporary zip file
         fs::remove_file(temp_file.path())?;
         fs::remove_dir_all(ffmpeg_folder.path())?;
+    }
+
+    Ok(())
+}
+
+fn download_yt_dlp() -> Result<(), Box<dyn Error>> {
+    // Check if yt-dlp is already installed
+    if Command::new(YT_DLP_PATH).output().is_ok() {
+        println!(
+            "YT-DLP is already installed. Skipping download. If you want to reinstall, delete the FFmpeg binary and run this script again."
+        );
+        return Ok(());
     }
 
     Ok(())
@@ -263,25 +281,33 @@ fn handle_transcription(
     Ok(())
 }
 
+
+// Usage: {} <path_to_wav_file> [model_path]
+#[derive(Parser)]
+struct Args {
+    #[arg(help = "Path to the audio containing file")]
+    audio_path: String, // Path to the audio file
+    #[arg(help = "Path to the model")]
+    model_path: Option<String>, // Path to the model
+    #[arg(long, help = "Use flash attention")]
+    fa: bool, // Use flash attention
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <path_to_wav_file> [model_path]", args[0]);
-        return;
-    }
+    let args = Args::parse();
 
     // Introduce a temporary binding for the default model path
     let binding = "ggml-large-v3-turbo.bin".to_string();
 
-    let audio_path = Path::new(&args[1]);
+    let audio_path = Path::new(&args.audio_path);
     if !audio_path.exists() {
-        eprintln!("Error: Audio file does not exist at {}", &args[1]);
+        eprintln!("Error: Audio file does not exist at {}", &args.audio_path);
         return;
     }
 
     // Use the temporary binding in unwrap_or
-    let model_path = args.get(2).unwrap_or(&binding);
-    let whisper_path = Path::new(model_path);
+    let model_path = args.model_path.unwrap_or(binding);
+    let whisper_path = Path::new(&model_path);
 
     // Download FFmpeg if not already installed
     match download_ffmpeg() {
