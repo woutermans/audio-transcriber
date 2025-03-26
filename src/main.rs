@@ -1,7 +1,7 @@
 use hound::{SampleFormat, WavReader};
 use std::error::Error;
 use std::fs;
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
@@ -291,7 +291,7 @@ fn handle_transcription(
 // Usage: {} <path_to_wav_file> [model_path]
 #[derive(Parser)]
 struct Args {
-    #[arg(help = "Path to the audio containing file", required = true, multiple_values = true)]
+    #[arg(help = "Path to the audio containing file", required = true, num_args = 1..)]
     audio_paths: Vec<String>, // Paths to the audio files
     #[arg(help = "Path to the model")]
     model_path: Option<String>, // Path to the model
