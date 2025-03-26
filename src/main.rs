@@ -266,8 +266,10 @@ fn handle_transcription(
     for sub in &subtitles {
         out_file_timestamps.write_all(
             format!(
-                "[{} - {}]: {}\n",
-                sub.start_time_cs, sub.end_time_cs, sub.text
+                "[{} --> {}]: {}\n",
+                cs_to_srt_time(sub.start_time_cs),
+                cs_to_srt_time(sub.end_time_cs),
+                sub.text
             )
             .as_bytes(),
         )?;
