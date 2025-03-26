@@ -89,7 +89,7 @@ cargo build --release --features vulkan
 | Flag               | Description                                  |
 |--------------------|----------------------------------------------|
 | `--model-path`     | Specify custom model path (default: ./ggml-large-v3-turbo.bin) |
-| `--fa / --no-fa`   | Enable/Disable Flash Attention acceleration  |
+| `--fa`   | Enable Flash Attention |
 
 ---
 
