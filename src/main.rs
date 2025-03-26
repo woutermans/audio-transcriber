@@ -291,8 +291,8 @@ fn handle_transcription(
 // Usage: {} <path_to_wav_file> [model_path]
 #[derive(Parser)]
 struct Args {
-    #[arg(help = "Path to the audio containing file")]
-    audio_path: String, // Path to the audio file
+    #[arg(help = "Path to the audio containing file", required = true, multiple_values = true)]
+    audio_paths: Vec<String>, // Paths to the audio files
     #[arg(help = "Path to the model")]
     model_path: Option<String>, // Path to the model
     #[arg(long, help = "Use flash attention")]
@@ -305,11 +305,13 @@ fn main() {
     // Introduce a temporary binding for the default model path
     let binding = "ggml-large-v3-turbo.bin".to_string();
 
-    let audio_path = Path::new(&args.audio_path);
-    if !audio_path.exists() {
-        eprintln!("Error: Audio file does not exist at {}", &args.audio_path);
-        return;
-    }
+    // Process each audio file
+    for audio_path_str in &args.audio_paths {
+        let audio_path = Path::new(audio_path_str);
+        if !audio_path.exists() {
+            eprintln!("Error: Audio file does not exist at {}", audio_path_str);
+            continue;
+        }
 
     // Use the temporary binding in unwrap_or
     let model_path = args.model_path.unwrap_or(binding);
@@ -328,79 +330,80 @@ fn main() {
         }
     }
 
-    let temp_dir = match create_temporary_directory() {
-        Ok(dir) => dir,
-        Err(e) => {
-            eprintln!("Failed to create temporary directory: {}", e);
-            std::process::exit(1);
+        // Create temp directory per file
+        let temp_dir = match create_temporary_directory() {
+            Ok(dir) => dir,
+            Err(e) => {
+                eprintln!("Failed to create temporary directory: {}", e);
+                continue;
+            }
+        };
+
+        let output_path = temp_dir.path().join("converted_audio.wav");
+
+        // Ensure WAV compatibility
+        match ensure_wav_compatibility(audio_path, &output_path) {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("Failed to ensure WAV compatibility for {}: {}", audio_path_str, e);
+                continue;
+            }
         }
-    };
 
-    let output_path = temp_dir.path().join("converted_audio.wav");
+        let original_samples = match parse_wav_file(&output_path) {
+            Ok(samples) => samples,
+            Err(e) => {
+                eprintln!("Failed to parse WAV file for {}: {}", audio_path_str, e);
+                continue;
+            }
+        };
 
-    // Ensure WAV file compatibility using FFmpeg
-    match ensure_wav_compatibility(audio_path, &output_path) {
-        Ok(_) => (),
-        Err(e) => {
-            eprintln!("Failed to ensure WAV compatibility: {}", e);
-            std::process::exit(1);
+        let mut samples = vec![0.0f32; original_samples.len()];
+        match whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples) {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("Failed to convert audio samples for {}: {}", audio_path_str, e);
+                continue;
+            }
+        };
+
+        const SAMPLE_RATE: usize = 16000;
+        const CHUNK_SIZE: usize = 30 * SAMPLE_RATE; // 30 seconds
+
+        // Perform transcription
+        match handle_transcription(whisper_path, samples, CHUNK_SIZE, audio_path, args.fa) {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("Transcription failed for {}: {}", audio_path_str, e);
+                continue;
+            }
         }
-    }
 
-    let original_samples = match parse_wav_file(&output_path) {
-        Ok(samples) => samples,
-        Err(e) => {
-            eprintln!("Failed to parse WAV file: {}", e);
-            std::process::exit(1);
-        }
-    };
+        // Cleanup temp_dir
+        match temp_dir.close() {
+            Ok(_) => (),
+            Err(e) => {
+                eprintln!("Failed to clean up temporary directory for {}: {}", audio_path_str, e);
+            }
+        };
 
-    let mut samples = vec![0.0f32; original_samples.len()];
-    match whisper_rs::convert_integer_to_float_audio(&original_samples, &mut samples) {
-        Ok(_) => (),
-        Err(e) => {
-            eprintln!("Failed to convert integer audio samples: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    const SAMPLE_RATE: usize = 16000;
-    const CHUNK_SIZE: usize = 30 * SAMPLE_RATE; // 30 seconds
-
-    // Perform transcription
-    match handle_transcription(whisper_path, samples, CHUNK_SIZE, audio_path, args.fa) {
-        Ok(_) => (),
-        Err(e) => {
-            eprintln!("Transcription failed: {}", e);
-            std::process::exit(1);
-        }
-    }
-
-    // Cleanup temporary directory
-    match temp_dir.close() {
-        Ok(_) => (),
-        Err(e) => {
-            eprintln!("Failed to clean up temporary directory: {}", e);
-            std::process::exit(1);
-        }
-    };
-
-    println!(
-        "Raw output written to {}.",
-        &format!(
-            "{}_raw.txt",
-            audio_path.file_stem().unwrap().to_string_lossy()
-        )
-    );
-    println!(
-        "Timestamped output written to {} and {}.",
-        &format!(
-            "{}_timestamps.txt",
-            audio_path.file_stem().unwrap().to_string_lossy()
-        ),
-        &format!(
-            "{}_timestamps.srt",
-            audio_path.file_stem().unwrap().to_string_lossy()
-        )
-    );
+        // Print outputs
+        println!(
+            "Raw output written to {}.",
+            &format!(
+                "{}_raw.txt",
+                audio_path.file_stem().unwrap().to_string_lossy()
+            )
+        );
+        println!(
+            "Timestamped output written to {} and {}.",
+            &format!(
+                "{}_timestamps.txt",
+                audio_path.file_stem().unwrap().to_string_lossy()
+            ),
+            &format!(
+                "{}_timestamps.srt",
+                audio_path.file_stem().unwrap().to_string_lossy()
+            )
+        );
 }
