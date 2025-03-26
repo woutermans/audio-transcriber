@@ -9,8 +9,6 @@ use tempfile::TempDir;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 use clap::Parser;
 
-mod download_ggml_model;
-
 // If windows: use ./ffmpeg else use ffmpeg
 const FFMPEG_PATH: &str = if cfg!(windows) {
     "./ffmpeg.exe"
