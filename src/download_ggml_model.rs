@@ -64,6 +64,10 @@ pub fn download_model(model: &str, config: Option<DownloadConfig>) -> Result<Pat
     // Create a temporary file to store the downloaded data
     let temp_file = NamedTempFile::new()?;
     fs::write(temp_file.path(), response.bytes()?)?;
+    let temp_path = temp_file.path();
+    if temp_path.metadata()?.len() == 0 {
+        return Err("Downloaded model file is empty".into());
+    }
 
     Ok(temp_file.into_temp_path().to_path_buf())
 }

@@ -90,9 +90,13 @@ fn download_ffmpeg() -> Result<(), Box<dyn std::error::Error>> {
         let ffmpeg_folder = fs::read_dir(".")?
             .filter_map(|entry| entry.ok())
             .filter(|entry| entry.file_type().ok().map_or(false, |t| t.is_dir()))
-            .filter(|entry| entry.file_name().to_str().unwrap().starts_with("ffmpeg"))
-            .next()
-            .unwrap();
+            .filter(|entry| entry.file_name().to_str().unwrap_or("").starts_with("ffmpeg"))
+            .next();
+
+        let ffmpeg_folder = match ffmpeg_folder {
+            Some(folder) => folder,
+            None => return Err("FFmpeg folder not found after download".into()),
+        };
 
         // Move the ffmpeg folder to the current directory
         let src = ffmpeg_folder.path().join("bin").join("ffmpeg.exe");
@@ -309,6 +313,10 @@ fn main() {
     // Use the temporary binding in unwrap_or
     let model_path = args.model_path.unwrap_or(binding);
     let whisper_path = Path::new(&model_path);
+    if !whisper_path.exists() {
+        eprintln!("Model not found at {}", whisper_path.display());
+        std::process::exit(1);
+    }
 
     // Download FFmpeg if not already installed
     match download_ffmpeg() {
