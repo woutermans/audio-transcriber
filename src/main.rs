@@ -305,14 +305,6 @@ fn main() {
     // Introduce a temporary binding for the default model path
     let binding = "ggml-large-v3-turbo.bin".to_string();
 
-    // Process each audio file
-    for audio_path_str in &args.audio_paths {
-        let audio_path = Path::new(audio_path_str);
-        if !audio_path.exists() {
-            eprintln!("Error: Audio file does not exist at {}", audio_path_str);
-            continue;
-        }
-
     // Use the temporary binding in unwrap_or
     let model_path = args.model_path.unwrap_or(binding);
     let whisper_path = Path::new(&model_path);
@@ -329,6 +321,14 @@ fn main() {
             std::process::exit(1);
         }
     }
+
+    // Process each audio file
+    for audio_path_str in &args.audio_paths {
+        let audio_path = Path::new(audio_path_str);
+        if !audio_path.exists() {
+            eprintln!("Error: Audio file does not exist at {}", audio_path_str);
+            continue;
+        }
 
         // Create temp directory per file
         let temp_dir = match create_temporary_directory() {
@@ -406,4 +406,4 @@ fn main() {
                 audio_path.file_stem().unwrap().to_string_lossy()
             )
         );
-}
+    }
