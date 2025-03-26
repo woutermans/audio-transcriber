@@ -228,7 +228,8 @@ fn handle_transcription(
 
         let num_segments = state.full_n_segments()?;
         for i in 0..num_segments {
-            let segment = state.full_get_segment_text(i)?;
+            let bytes = state.full_get_segment_text_bytes(i)?;
+            let segment = String::from_utf8_lossy(&bytes).to_string();
             let start_timestamp_cs = state.full_get_segment_t0(i)? + total_cs;
             let end_timestamp_cs = state.full_get_segment_t1(i)? + total_cs;
 
